@@ -19,29 +19,28 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webContainer: FrameLayout
     private lateinit var rvTabs: RecyclerView
     private lateinit var tabAdapter: TabAdapter
-
-    // Gamepad
     private lateinit var gamepadOverlay: View
     private lateinit var btnToggleGamepad: ImageButton
-
-    // Video
     private lateinit var videoControls: LinearLayout
     private lateinit var btnVideoPlay: ImageButton
     private lateinit var btnVideoFullscreen: ImageButton
     private lateinit var btnVideoClose: ImageButton
-
-    // Search bar
     private lateinit var searchBar: LinearLayout
     private lateinit var etSearch: EditText
     private lateinit var tvSearchResult: TextView
+    private lateinit var btnAdBlock: ImageButton
 
     // ── State ──────────────────────────────────────────────────────────────
     private val tabs = mutableListOf<BrowserTab>()
     private var activeTabIndex = 0
     private var tabCounter = 0
     private var gamepadVisible = false
-    private var videoControlsVisible = false
     private var searchBarVisible = false
+
+    // Fullscreen video
+    private var customView: View? = null
+    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+    private var fullscreenContainer: FrameLayout? = null
 
     private val activeWebView get() = tabs.getOrNull(activeTabIndex)?.webView
 
@@ -63,19 +62,20 @@ class MainActivity : AppCompatActivity() {
     // ── BIND VIEWS ─────────────────────────────────────────────────────────
 
     private fun bindViews() {
-        etAddress        = findViewById(R.id.etAddress)
-        progressBar      = findViewById(R.id.progressBar)
-        webContainer     = findViewById(R.id.webContainer)
-        rvTabs           = findViewById(R.id.rvTabs)
-        gamepadOverlay   = findViewById(R.id.gamepadOverlay)
-        btnToggleGamepad = findViewById(R.id.btnToggleGamepad)
-        videoControls    = findViewById(R.id.videoControls)
-        btnVideoPlay     = findViewById(R.id.btnVideoPlay)
+        etAddress          = findViewById(R.id.etAddress)
+        progressBar        = findViewById(R.id.progressBar)
+        webContainer       = findViewById(R.id.webContainer)
+        rvTabs             = findViewById(R.id.rvTabs)
+        gamepadOverlay     = findViewById(R.id.gamepadOverlay)
+        btnToggleGamepad   = findViewById(R.id.btnToggleGamepad)
+        videoControls      = findViewById(R.id.videoControls)
+        btnVideoPlay       = findViewById(R.id.btnVideoPlay)
         btnVideoFullscreen = findViewById(R.id.btnVideoFullscreen)
-        btnVideoClose    = findViewById(R.id.btnVideoClose)
-        searchBar        = findViewById(R.id.searchBar)
-        etSearch         = findViewById(R.id.etSearch)
-        tvSearchResult   = findViewById(R.id.tvSearchResult)
+        btnVideoClose      = findViewById(R.id.btnVideoClose)
+        searchBar          = findViewById(R.id.searchBar)
+        etSearch           = findViewById(R.id.etSearch)
+        tvSearchResult     = findViewById(R.id.tvSearchResult)
+        btnAdBlock         = findViewById(R.id.btnAdBlock)
     }
 
     // ── TABS ───────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ class MainActivity : AppCompatActivity() {
         rvTabs.adapter = tabAdapter
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     private fun openNewTab(url: String = "https://www.google.com") {
         val wv = WebView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -123,47 +123,43 @@ class MainActivity : AppCompatActivity() {
 
     private fun switchTab(index: Int) {
         if (index < 0 || index >= tabs.size) return
-
-        // Ocultar WebView anterior
         tabs.getOrNull(activeTabIndex)?.webView?.visibility = View.GONE
-
         activeTabIndex = index
         tabAdapter.setActive(index)
-
-        // Mostrar WebView nuevo
         val wv = tabs[index].webView
         wv?.visibility = View.VISIBLE
-
-        // Actualizar barra de dirección
         val url = tabs[index].url
         etAddress.setText(if (url == "about:blank" || url.isEmpty()) "" else url)
-
         rvTabs.scrollToPosition(index)
     }
 
     private fun closeTab(index: Int) {
         if (tabs.size == 1) {
-            // Si es la última, abrir una nueva
             tabs[0].webView?.loadUrl("https://www.google.com")
             return
         }
-
         webContainer.removeView(tabs[index].webView)
         tabs.removeAt(index)
         tabAdapter.notifyItemRemoved(index)
         tabAdapter.notifyItemRangeChanged(index, tabs.size)
-
-        val newIndex = if (index >= tabs.size) tabs.size - 1 else index
-        switchTab(newIndex)
+        switchTab(if (index >= tabs.size) tabs.size - 1 else index)
     }
 
     // ── WEBVIEW CLIENTS ────────────────────────────────────────────────────
 
     private fun buildWebViewClient() = object : WebViewClient() {
+
+        override fun shouldInterceptRequest(
+            view: WebView,
+            request: WebResourceRequest
+        ): WebResourceResponse? {
+            if (AdBlocker.shouldBlock(request)) return AdBlocker.getEmptyResponse()
+            return super.shouldInterceptRequest(view, request)
+        }
+
         override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
             progressBar.visibility = View.VISIBLE
             etAddress.setText(url)
-            // Actualizar URL en tab
             tabs.getOrNull(activeTabIndex)?.url = url
         }
 
@@ -177,14 +173,22 @@ class MainActivity : AppCompatActivity() {
             tabAdapter.notifyItemChanged(activeTabIndex)
             etAddress.setText(url)
             injectVideoDetector(view)
+
+            // Ocultar elementos de anuncios via CSS
+            view.evaluateJavascript(AdBlocker.getAdHidingCss(), null)
         }
 
-        override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
+        override fun onReceivedSslError(
+            view: WebView,
+            handler: SslErrorHandler,
+            error: android.net.http.SslError
+        ) {
             handler.proceed()
         }
     }
 
     private fun buildWebChromeClient() = object : WebChromeClient() {
+
         override fun onProgressChanged(view: WebView, newProgress: Int) {
             progressBar.progress = newProgress
             if (newProgress == 100) progressBar.visibility = View.GONE
@@ -193,6 +197,48 @@ class MainActivity : AppCompatActivity() {
         override fun onReceivedTitle(view: WebView, title: String) {
             tabs.getOrNull(activeTabIndex)?.title = title
             tabAdapter.notifyItemChanged(activeTabIndex)
+        }
+
+        // ── FULLSCREEN VIDEO ──────────────────────────────────────────────
+        override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+            if (customView != null) { callback.onCustomViewHidden(); return }
+
+            customView = view
+            customViewCallback = callback
+
+            val container = FrameLayout(this@MainActivity).apply {
+                setBackgroundColor(android.graphics.Color.BLACK)
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            }
+            container.addView(view, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+
+            val root = window.decorView as FrameLayout
+            root.addView(container)
+            fullscreenContainer = container
+
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility =
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        }
+
+        override fun onHideCustomView() {
+            customView ?: return
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+            val root = window.decorView as FrameLayout
+            fullscreenContainer?.let { root.removeView(it) }
+            fullscreenContainer = null
+            customView = null
+            customViewCallback?.onCustomViewHidden()
+            customViewCallback = null
         }
     }
 
@@ -206,7 +252,6 @@ class MainActivity : AppCompatActivity() {
                 true
             } else false
         }
-
         etAddress.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) etAddress.selectAll()
         }
@@ -219,8 +264,7 @@ class MainActivity : AppCompatActivity() {
             input.contains(".") && !input.contains(" ") -> "https://$input"
             else -> "https://www.google.com/search?q=${android.net.Uri.encode(input)}"
         }
-        if (tabs.isEmpty()) openNewTab(url)
-        else activeWebView?.loadUrl(url)
+        if (tabs.isEmpty()) openNewTab(url) else activeWebView?.loadUrl(url)
     }
 
     // ── GAMEPAD ────────────────────────────────────────────────────────────
@@ -234,41 +278,29 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        // D-Pad
         setupGamepadBtn(R.id.btnUp)    { injectKey("ArrowUp") }
         setupGamepadBtn(R.id.btnDown)  { injectKey("ArrowDown") }
         setupGamepadBtn(R.id.btnLeft)  { injectKey("ArrowLeft") }
         setupGamepadBtn(R.id.btnRight) { injectKey("ArrowRight") }
-
-        // Botones de acción
-        setupGamepadBtn(R.id.btnA) { injectKey("Enter") }
-        setupGamepadBtn(R.id.btnB) { injectKey("Escape") }
-        setupGamepadBtn(R.id.btnX) { injectKey(" ") }        // Space
-        setupGamepadBtn(R.id.btnY) { injectKey("Backspace") }
-
-        // L / R
-        setupGamepadBtn(R.id.btnL) { activeWebView?.scrollBy(-100, 0) }
-        setupGamepadBtn(R.id.btnR) { activeWebView?.scrollBy(100, 0) }
-
-        // START / SELECT
-        setupGamepadBtn(R.id.btnStart)  { activeWebView?.scrollBy(0, 300) }
-        setupGamepadBtn(R.id.btnSelect) { activeWebView?.scrollBy(0, -300) }
+        setupGamepadBtn(R.id.btnA)     { injectKey("Enter") }
+        setupGamepadBtn(R.id.btnB)     { injectKey("Escape") }
+        setupGamepadBtn(R.id.btnX)     { injectKey(" ") }
+        setupGamepadBtn(R.id.btnY)     { injectKey("Backspace") }
+        setupGamepadBtn(R.id.btnL)     { activeWebView?.scrollBy(-100, 0) }
+        setupGamepadBtn(R.id.btnR)     { activeWebView?.scrollBy(100, 0) }
+        setupGamepadBtn(R.id.btnStart) { activeWebView?.scrollBy(0, 300) }
+        setupGamepadBtn(R.id.btnSelect){ activeWebView?.scrollBy(0, -300) }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun setupGamepadBtn(id: Int, action: () -> Unit) {
         val btn = gamepadOverlay.findViewById<View>(id) ?: return
         btn.setOnClickListener { action() }
-
-        // Soporte de pulsación continua
         btn.setOnTouchListener { v, event ->
             when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    v.alpha = 0.6f
-                    action()
-                }
+                MotionEvent.ACTION_DOWN -> { v.alpha = 0.6f; action() }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    v.alpha = 1f
-                    v.performClick()
+                    v.alpha = 1f; v.performClick()
                 }
             }
             true
@@ -290,31 +322,21 @@ class MainActivity : AppCompatActivity() {
     // ── VIDEO CONTROLS ─────────────────────────────────────────────────────
 
     private fun injectVideoDetector(view: WebView) {
-        val js = """
-            (function() {
-                var videos = document.querySelectorAll('video');
-                if (videos.length > 0) {
-                    VideoBridge.onVideoFound(videos.length);
-                }
-                // Observar si se agrega un video después
-                var obs = new MutationObserver(function() {
-                    var v = document.querySelectorAll('video');
-                    if (v.length > 0) VideoBridge.onVideoFound(v.length);
-                });
-                obs.observe(document.body, {childList:true, subtree:true});
-            })();
-        """.trimIndent()
-
         view.addJavascriptInterface(object {
             @JavascriptInterface
             fun onVideoFound(count: Int) {
-                runOnUiThread {
-                    videoControls.visibility = View.VISIBLE
-                }
+                runOnUiThread { videoControls.visibility = View.VISIBLE }
             }
         }, "VideoBridge")
 
-        view.evaluateJavascript(js, null)
+        view.evaluateJavascript("""
+            (function() {
+                if (document.querySelectorAll('video').length > 0) VideoBridge.onVideoFound(1);
+                new MutationObserver(function() {
+                    if (document.querySelectorAll('video').length > 0) VideoBridge.onVideoFound(1);
+                }).observe(document.body, {childList:true, subtree:true});
+            })();
+        """.trimIndent(), null)
     }
 
     private fun setupVideoControls() {
@@ -322,64 +344,42 @@ class MainActivity : AppCompatActivity() {
 
         btnVideoPlay.setOnClickListener {
             activeWebView?.evaluateJavascript("""
-                (function() {
-                    var v = document.querySelector('video');
-                    if (!v) return;
-                    if (v.paused) { v.play(); } else { v.pause(); }
-                })();
+                (function(){var v=document.querySelector('video');
+                if(v){if(v.paused)v.play();else v.pause();}})();
             """.trimIndent(), null)
         }
 
         btnVideoFullscreen.setOnClickListener {
             activeWebView?.evaluateJavascript("""
-                (function() {
-                    var v = document.querySelector('video');
-                    if (!v) return;
-                    if (v.requestFullscreen) v.requestFullscreen();
-                    else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen();
-                })();
+                (function(){var v=document.querySelector('video');
+                if(!v)return;
+                if(v.requestFullscreen)v.requestFullscreen();
+                else if(v.webkitRequestFullscreen)v.webkitRequestFullscreen();})();
             """.trimIndent(), null)
         }
 
-        btnVideoClose.setOnClickListener {
-            videoControls.visibility = View.GONE
-        }
+        btnVideoClose.setOnClickListener { videoControls.visibility = View.GONE }
     }
 
     // ── SEARCH IN PAGE ─────────────────────────────────────────────────────
 
     private fun setupSearchBar() {
         searchBar.visibility = View.GONE
-        var searchIndex = 0
-        var searchTotal = 0
 
         etSearch.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE) {
                 val query = etSearch.text.toString().trim()
-                if (query.isNotEmpty()) {
-                    searchIndex = 0
-                    activeWebView?.findAllAsync(query)
-                }
+                if (query.isNotEmpty()) activeWebView?.findAllAsync(query)
                 true
             } else false
-        }
-
-        activeWebView?.setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
-            searchTotal = numberOfMatches
-            searchIndex = activeMatchOrdinal
-            tvSearchResult.text = if (numberOfMatches > 0)
-                "${activeMatchOrdinal + 1}/$numberOfMatches"
-            else "0 resultados"
         }
 
         findViewById<ImageButton>(R.id.btnSearchNext).setOnClickListener {
             activeWebView?.findNext(true)
         }
-
         findViewById<ImageButton>(R.id.btnSearchPrev).setOnClickListener {
             activeWebView?.findNext(false)
         }
-
         findViewById<ImageButton>(R.id.btnSearchClose).setOnClickListener {
             activeWebView?.clearMatches()
             searchBar.visibility = View.GONE
@@ -393,19 +393,15 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener {
             if (activeWebView?.canGoBack() == true) activeWebView?.goBack()
         }
-
         findViewById<ImageButton>(R.id.btnForward).setOnClickListener {
             if (activeWebView?.canGoForward() == true) activeWebView?.goForward()
         }
-
         findViewById<ImageButton>(R.id.btnReload).setOnClickListener {
             activeWebView?.reload()
         }
-
         findViewById<ImageButton>(R.id.btnNewTab).setOnClickListener {
             openNewTab()
         }
-
         findViewById<ImageButton>(R.id.btnSearch).setOnClickListener {
             searchBarVisible = !searchBarVisible
             searchBar.visibility = if (searchBarVisible) View.VISIBLE else View.GONE
@@ -416,9 +412,25 @@ class MainActivity : AppCompatActivity() {
                 activeWebView?.clearMatches()
             }
         }
+
+        // ── ADBLOCK TOGGLE ─────────────────────────────────────────────
+        updateAdBlockBtn()
+        btnAdBlock.setOnClickListener {
+            AdBlocker.toggle()
+            updateAdBlockBtn()
+            val msg = if (AdBlocker.enabled) "🛡️ Bloqueador activado" else "⚠️ Bloqueador desactivado"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            activeWebView?.reload()
+        }
     }
 
-    // ── UTILS ───────────────────────────────────────────────────────────────
+    private fun updateAdBlockBtn() {
+        btnAdBlock.setColorFilter(
+            if (AdBlocker.enabled) 0xFF00ffc3.toInt() else 0xFF4a5568.toInt()
+        )
+    }
+
+    // ── UTILS ──────────────────────────────────────────────────────────────
 
     private fun hideKeyboard() {
         val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
@@ -433,6 +445,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onBackPressed() {
         when {
+            customView != null -> {
+                @Suppress("DEPRECATION")
+                window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                val root = window.decorView as FrameLayout
+                fullscreenContainer?.let { root.removeView(it) }
+                fullscreenContainer = null
+                customView = null
+                customViewCallback?.onCustomViewHidden()
+                customViewCallback = null
+            }
             searchBarVisible -> {
                 activeWebView?.clearMatches()
                 searchBar.visibility = View.GONE

@@ -6,7 +6,7 @@
     android:layout_height="match_parent"
     android:background="#080a0f">
 
-    <!-- ═══ BARRA DE PESTAÑAS ═══ -->
+    <!-- ═══ PESTAÑAS ═══ -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvTabs"
         android:layout_width="0dp"
@@ -16,7 +16,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- ═══ BARRA DE DIRECCIÓN ═══ -->
+    <!-- ═══ BARRA DIRECCIÓN ═══ -->
     <LinearLayout
         android:id="@+id/addressBar"
         android:layout_width="0dp"
@@ -77,7 +77,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- ═══ BARRA DE BÚSQUEDA EN PÁGINA ═══ -->
+    <!-- ═══ BARRA BÚSQUEDA EN PÁGINA ═══ -->
     <LinearLayout
         android:id="@+id/searchBar"
         android:layout_width="0dp"
@@ -143,7 +143,7 @@
 
     </LinearLayout>
 
-    <!-- ═══ WEBVIEW CONTAINER ═══ -->
+    <!-- ═══ WEBVIEW ═══ -->
     <FrameLayout
         android:id="@+id/webContainer"
         android:layout_width="0dp"
@@ -153,7 +153,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- ═══ CONTROLES DE VIDEO ═══ -->
+    <!-- ═══ CONTROLES VIDEO ═══ -->
     <LinearLayout
         android:id="@+id/videoControls"
         android:layout_width="0dp"
@@ -200,7 +200,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_close_clear_cancel"
             android:tint="#4a5568"
-            android:contentDescription="Cerrar controles" />
+            android:contentDescription="Cerrar" />
 
     </LinearLayout>
 
@@ -257,6 +257,16 @@
             android:contentDescription="Buscar en página" />
 
         <ImageButton
+            android:id="@+id/btnAdBlock"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_shield"
+            android:tint="#00ffc3"
+            android:contentDescription="Bloqueador de anuncios" />
+
+        <ImageButton
             android:id="@+id/btnNewTab"
             android:layout_width="0dp"
             android:layout_height="48dp"
@@ -279,7 +289,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- D-Pad (izquierda) -->
         <LinearLayout
             android:layout_width="130dp"
             android:layout_height="130dp"
@@ -315,10 +324,8 @@
                 android:layout_gravity="center_horizontal"
                 android:text="▼" android:textSize="16sp"
                 style="@style/GamepadBtn" />
-
         </LinearLayout>
 
-        <!-- L / R / SELECT / START (centro-bottom) -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -330,27 +337,22 @@
                 android:layout_width="52dp" android:layout_height="36dp"
                 android:text="L" android:textSize="13sp"
                 style="@style/GamepadBtnSm" />
-
             <Button android:id="@+id/btnSelect"
                 android:layout_width="52dp" android:layout_height="36dp"
                 android:text="SEL" android:textSize="11sp"
                 android:layout_marginHorizontal="4dp"
                 style="@style/GamepadBtnSm" />
-
             <Button android:id="@+id/btnStart"
                 android:layout_width="52dp" android:layout_height="36dp"
                 android:text="STA" android:textSize="11sp"
                 android:layout_marginHorizontal="4dp"
                 style="@style/GamepadBtnSm" />
-
             <Button android:id="@+id/btnR"
                 android:layout_width="52dp" android:layout_height="36dp"
                 android:text="R" android:textSize="13sp"
                 style="@style/GamepadBtnSm" />
-
         </LinearLayout>
 
-        <!-- Botones ABXY (derecha) -->
         <LinearLayout
             android:layout_width="130dp"
             android:layout_height="130dp"
@@ -386,7 +388,6 @@
                 android:layout_gravity="center_horizontal"
                 android:text="A" android:textSize="15sp"
                 style="@style/GamepadBtnA" />
-
         </LinearLayout>
 
     </FrameLayout>
