@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.Browser" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#00ffc3</item>
+        <item name="colorPrimaryVariant">#00b894</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="android:windowBackground">#080a0f</item>
+        <item name="android:statusBarColor">#0d1117</item>
+        <item name="android:navigationBarColor">#0d1117</item>
+    </style>
+
+    <!-- Botones D-Pad -->
+    <style name="GamepadBtn">
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:textColor">#e2e8f0</item>
+        <item name="backgroundTint">#1e3a4a</item>
+        <item name="android:alpha">0.85</item>
+        <item name="cornerRadius">22dp</item>
+        <item name="elevation">4dp</item>
+        <item name="android:padding">0dp</item>
+    </style>
+
+    <style name="GamepadBtnSm">
+        <item name="android:textColor">#e2e8f0</item>
+        <item name="backgroundTint">#1e2d40</item>
+        <item name="android:alpha">0.85</item>
+        <item name="cornerRadius">6dp</item>
+        <item name="elevation">4dp</item>
+        <item name="android:padding">0dp</item>
+    </style>
+
+    <!-- A - verde -->
+    <style name="GamepadBtnA">
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:textColor">#000000</item>
+        <item name="backgroundTint">#00c853</item>
+        <item name="android:alpha">0.85</item>
+        <item name="cornerRadius">22dp</item>
+        <item name="elevation">4dp</item>
+        <item name="android:padding">0dp</item>
+    </style>
+
+    <!-- B - rojo -->
+    <style name="GamepadBtnB">
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:textColor">#ffffff</item>
+        <item name="backgroundTint">#d50000</item>
+        <item name="android:alpha">0.85</item>
+        <item name="cornerRadius">22dp</item>
+        <item name="elevation">4dp</item>
+        <item name="android:padding">0dp</item>
+    </style>
+
+    <!-- X - azul -->
+    <style name="GamepadBtnX">
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:textColor">#ffffff</item>
+        <item name="backgroundTint">#2979ff</item>
+        <item name="android:alpha">0.85</item>
+        <item name="cornerRadius">22dp</item>
+        <item name="elevation">4dp</item>
+        <item name="android:padding">0dp</item>
+    </style>
+
+    <!-- Y - amarillo -->
+    <style name="GamepadBtnY">
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:textColor">#000000</item>
+        <item name="backgroundTint">#ffd600</item>
+        <item name="android:alpha">0.85</item>
+        <item name="cornerRadius">22dp</item>
+        <item name="elevation">4dp</item>
+        <item name="android:padding">0dp</item>
+    </style>
+
+</resources>
