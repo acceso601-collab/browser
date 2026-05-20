@@ -1,13 +1,18 @@
 package com.browser.app
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.*
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.webkit.*
 import android.widget.*
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
@@ -29,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etSearch: EditText
     private lateinit var tvSearchResult: TextView
     private lateinit var btnAdBlock: ImageButton
+    private lateinit var btnMenu: ImageButton
 
     // ── State ──────────────────────────────────────────────────────────────
     private val tabs = mutableListOf<BrowserTab>()
@@ -36,15 +42,22 @@ class MainActivity : AppCompatActivity() {
     private var tabCounter = 0
     private var gamepadVisible = false
     private var searchBarVisible = false
+    private var desktopMode = false
 
     // Fullscreen video
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var fullscreenContainer: FrameLayout? = null
 
+    companion object {
+        const val REQ_HISTORY = 301
+        const val REQ_FAVORITES = 302
+    }
+
     private val activeWebView get() = tabs.getOrNull(activeTabIndex)?.webView
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        applyTheme()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
@@ -55,8 +68,56 @@ class MainActivity : AppCompatActivity() {
         setupVideoControls()
         setupSearchBar()
         setupBottomBar()
+        setupMenuButton()
 
         openNewTab("https://www.google.com")
+    }
+
+    // ── THEME ──────────────────────────────────────────────────────────────
+
+    private fun applyTheme() {
+        when (StorageManager.getTheme(this)) {
+            StorageManager.THEME_LIGHT -> AppCompatDelegate.setDefaultNightMode(
+                AppCompatDelegate.MODE_NIGHT_NO)
+            else -> AppCompatDelegate.setDefaultNightMode(
+                AppCompatDelegate.MODE_NIGHT_YES)
+        }
+    }
+
+    private fun applyForcedDarkToWebView(wv: WebView) {
+        if (StorageManager.getTheme(this) == StorageManager.THEME_FORCED_DARK) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                @Suppress("DEPRECATION")
+                wv.settings.forceDark = WebSettings.FORCE_DARK_ON
+            } else {
+                // Android 9: inyectar CSS
+                wv.evaluateJavascript("""
+                    (function(){
+                        var s=document.createElement('style');
+                        s.id='force-dark-css';
+                        s.textContent='html{filter:invert(1) hue-rotate(180deg)!important}'+
+                            'img,video,canvas{filter:invert(1) hue-rotate(180deg)!important}';
+                        if(!document.getElementById('force-dark-css'))
+                            document.head.appendChild(s);
+                    })();
+                """.trimIndent(), null)
+            }
+        }
+    }
+
+    private fun showThemeDialog() {
+        val options = arrayOf("🌑 Oscuro", "☀️ Claro", "🌚 Oscuro forzado")
+        val current = StorageManager.getTheme(this)
+
+        AlertDialog.Builder(this)
+            .setTitle("Elegir tema")
+            .setSingleChoiceItems(options, current) { dialog, which ->
+                StorageManager.saveTheme(this, which)
+                dialog.dismiss()
+                recreate() // Reinicia la actividad con el nuevo tema
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     // ── BIND VIEWS ─────────────────────────────────────────────────────────
@@ -76,6 +137,78 @@ class MainActivity : AppCompatActivity() {
         etSearch           = findViewById(R.id.etSearch)
         tvSearchResult     = findViewById(R.id.tvSearchResult)
         btnAdBlock         = findViewById(R.id.btnAdBlock)
+        btnMenu            = findViewById(R.id.btnMenu)
+    }
+
+    // ── MENU ───────────────────────────────────────────────────────────────
+
+    private fun setupMenuButton() {
+        btnMenu.setOnClickListener { view ->
+            val popup = PopupMenu(this, view)
+            popup.menuInflater.inflate(R.menu.browser_menu, popup.menu)
+
+            // Cambiar texto de favorito si ya está guardado
+            val currentUrl = tabs.getOrNull(activeTabIndex)?.url ?: ""
+            val isFav = StorageManager.isFavorite(this, currentUrl)
+            popup.menu.findItem(R.id.menu_favorite)?.title =
+                if (isFav) "💛 Quitar de favoritos" else "⭐ Añadir a favoritos"
+
+            // Modo escritorio
+            popup.menu.findItem(R.id.menu_desktop)?.title =
+                if (desktopMode) "📱 Modo móvil" else "🖥️ Modo escritorio"
+
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    R.id.menu_favorite -> {
+                        val tab = tabs.getOrNull(activeTabIndex)
+                        if (tab != null) {
+                            if (isFav) {
+                                StorageManager.removeFavorite(this, tab.url)
+                                Toast.makeText(this, "Eliminado de favoritos", Toast.LENGTH_SHORT).show()
+                            } else {
+                                StorageManager.addFavorite(this, tab.url, tab.title)
+                                Toast.makeText(this, "⭐ Añadido a favoritos", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    R.id.menu_favorites -> {
+                        startActivityForResult(
+                            Intent(this, FavoritesActivity::class.java), REQ_FAVORITES)
+                    }
+                    R.id.menu_history -> {
+                        startActivityForResult(
+                            Intent(this, HistoryActivity::class.java), REQ_HISTORY)
+                    }
+                    R.id.menu_theme -> showThemeDialog()
+                    R.id.menu_desktop -> toggleDesktopMode()
+                }
+                true
+            }
+            popup.show()
+        }
+    }
+
+    private fun toggleDesktopMode() {
+        desktopMode = !desktopMode
+        val wv = activeWebView ?: return
+        val ua = if (desktopMode)
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+        else
+            "Mozilla/5.0 (Linux; Android 9) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
+        wv.settings.userAgentString = ua
+        wv.reload()
+        Toast.makeText(this,
+            if (desktopMode) "🖥️ Modo escritorio" else "📱 Modo móvil",
+            Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode == Activity.RESULT_OK) {
+            val url = data?.getStringExtra(HistoryActivity.RESULT_URL)
+                ?: data?.getStringExtra(FavoritesActivity.RESULT_URL)
+            if (!url.isNullOrEmpty()) navigate(url)
+        }
     }
 
     // ── TABS ───────────────────────────────────────────────────────────────
@@ -89,7 +222,7 @@ class MainActivity : AppCompatActivity() {
         rvTabs.adapter = tabAdapter
     }
 
-    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
+    @SuppressLint("SetJavaScriptEnabled")
     private fun openNewTab(url: String = "https://www.google.com") {
         val wv = WebView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -110,6 +243,7 @@ class MainActivity : AppCompatActivity() {
             webViewClient = buildWebViewClient()
             webChromeClient = buildWebChromeClient()
         }
+        applyForcedDarkToWebView(wv)
 
         val tab = BrowserTab(id = tabCounter++, webView = wv)
         tabs.add(tab)
@@ -126,8 +260,7 @@ class MainActivity : AppCompatActivity() {
         tabs.getOrNull(activeTabIndex)?.webView?.visibility = View.GONE
         activeTabIndex = index
         tabAdapter.setActive(index)
-        val wv = tabs[index].webView
-        wv?.visibility = View.VISIBLE
+        tabs[index].webView?.visibility = View.VISIBLE
         val url = tabs[index].url
         etAddress.setText(if (url == "about:blank" || url.isEmpty()) "" else url)
         rvTabs.scrollToPosition(index)
@@ -135,8 +268,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun closeTab(index: Int) {
         if (tabs.size == 1) {
-            tabs[0].webView?.loadUrl("https://www.google.com")
-            return
+            tabs[0].webView?.loadUrl("https://www.google.com"); return
         }
         webContainer.removeView(tabs[index].webView)
         tabs.removeAt(index)
@@ -149,10 +281,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildWebViewClient() = object : WebViewClient() {
 
-        override fun shouldInterceptRequest(
-            view: WebView,
-            request: WebResourceRequest
-        ): WebResourceResponse? {
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             if (AdBlocker.shouldBlock(request)) return AdBlocker.getEmptyResponse()
             return super.shouldInterceptRequest(view, request)
         }
@@ -172,17 +301,16 @@ class MainActivity : AppCompatActivity() {
             }
             tabAdapter.notifyItemChanged(activeTabIndex)
             etAddress.setText(url)
-            injectVideoDetector(view)
 
-            // Ocultar elementos de anuncios via CSS
+            // Guardar en historial
+            StorageManager.addHistory(this@MainActivity, url, title)
+
+            injectVideoDetector(view)
             view.evaluateJavascript(AdBlocker.getAdHidingCss(), null)
+            applyForcedDarkToWebView(view)
         }
 
-        override fun onReceivedSslError(
-            view: WebView,
-            handler: SslErrorHandler,
-            error: android.net.http.SslError
-        ) {
+        override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: android.net.http.SslError) {
             handler.proceed()
         }
     }
@@ -199,42 +327,29 @@ class MainActivity : AppCompatActivity() {
             tabAdapter.notifyItemChanged(activeTabIndex)
         }
 
-        // ── FULLSCREEN VIDEO ──────────────────────────────────────────────
         override fun onShowCustomView(view: View, callback: CustomViewCallback) {
             if (customView != null) { callback.onCustomViewHidden(); return }
-
             customView = view
             customViewCallback = callback
-
             val container = FrameLayout(this@MainActivity).apply {
                 setBackgroundColor(android.graphics.Color.BLACK)
                 layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT
-                )
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
             }
             container.addView(view, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            ))
-
-            val root = window.decorView as FrameLayout
-            root.addView(container)
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            (window.decorView as FrameLayout).addView(container)
             fullscreenContainer = container
-
             @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility =
-                View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         }
 
         override fun onHideCustomView() {
             customView ?: return
             @Suppress("DEPRECATION")
             window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-            val root = window.decorView as FrameLayout
-            fullscreenContainer?.let { root.removeView(it) }
+            fullscreenContainer?.let { (window.decorView as FrameLayout).removeView(it) }
             fullscreenContainer = null
             customView = null
             customViewCallback?.onCustomViewHidden()
@@ -247,14 +362,10 @@ class MainActivity : AppCompatActivity() {
     private fun setupAddressBar() {
         etAddress.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
-                navigate(etAddress.text.toString().trim())
-                hideKeyboard()
-                true
+                navigate(etAddress.text.toString().trim()); hideKeyboard(); true
             } else false
         }
-        etAddress.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus) etAddress.selectAll()
-        }
+        etAddress.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) etAddress.selectAll() }
     }
 
     private fun navigate(input: String) {
@@ -274,22 +385,20 @@ class MainActivity : AppCompatActivity() {
             gamepadVisible = !gamepadVisible
             gamepadOverlay.visibility = if (gamepadVisible) View.VISIBLE else View.GONE
             btnToggleGamepad.setColorFilter(
-                if (gamepadVisible) 0xFF00ffc3.toInt() else 0xFF4a5568.toInt()
-            )
+                if (gamepadVisible) 0xFF00ffc3.toInt() else 0xFF4a5568.toInt())
         }
-
-        setupGamepadBtn(R.id.btnUp)    { injectKey("ArrowUp") }
-        setupGamepadBtn(R.id.btnDown)  { injectKey("ArrowDown") }
-        setupGamepadBtn(R.id.btnLeft)  { injectKey("ArrowLeft") }
-        setupGamepadBtn(R.id.btnRight) { injectKey("ArrowRight") }
-        setupGamepadBtn(R.id.btnA)     { injectKey("Enter") }
-        setupGamepadBtn(R.id.btnB)     { injectKey("Escape") }
-        setupGamepadBtn(R.id.btnX)     { injectKey(" ") }
-        setupGamepadBtn(R.id.btnY)     { injectKey("Backspace") }
-        setupGamepadBtn(R.id.btnL)     { activeWebView?.scrollBy(-100, 0) }
-        setupGamepadBtn(R.id.btnR)     { activeWebView?.scrollBy(100, 0) }
-        setupGamepadBtn(R.id.btnStart) { activeWebView?.scrollBy(0, 300) }
-        setupGamepadBtn(R.id.btnSelect){ activeWebView?.scrollBy(0, -300) }
+        setupGamepadBtn(R.id.btnUp)     { injectKey("ArrowUp") }
+        setupGamepadBtn(R.id.btnDown)   { injectKey("ArrowDown") }
+        setupGamepadBtn(R.id.btnLeft)   { injectKey("ArrowLeft") }
+        setupGamepadBtn(R.id.btnRight)  { injectKey("ArrowRight") }
+        setupGamepadBtn(R.id.btnA)      { injectKey("Enter") }
+        setupGamepadBtn(R.id.btnB)      { injectKey("Escape") }
+        setupGamepadBtn(R.id.btnX)      { injectKey(" ") }
+        setupGamepadBtn(R.id.btnY)      { injectKey("Backspace") }
+        setupGamepadBtn(R.id.btnL)      { activeWebView?.scrollBy(-100, 0) }
+        setupGamepadBtn(R.id.btnR)      { activeWebView?.scrollBy(100, 0) }
+        setupGamepadBtn(R.id.btnStart)  { activeWebView?.scrollBy(0, 300) }
+        setupGamepadBtn(R.id.btnSelect) { activeWebView?.scrollBy(0, -300) }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -299,24 +408,18 @@ class MainActivity : AppCompatActivity() {
         btn.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> { v.alpha = 0.6f; action() }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    v.alpha = 1f; v.performClick()
-                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { v.alpha = 1f; v.performClick() }
             }
             true
         }
     }
 
     private fun injectKey(key: String) {
-        val js = """
-            (function() {
-                var el = document.activeElement || document.body;
-                ['keydown','keypress','keyup'].forEach(function(t) {
-                    el.dispatchEvent(new KeyboardEvent(t, {key:'$key', bubbles:true}));
-                });
-            })();
-        """.trimIndent()
-        activeWebView?.evaluateJavascript(js, null)
+        activeWebView?.evaluateJavascript("""
+            (function(){var el=document.activeElement||document.body;
+            ['keydown','keypress','keyup'].forEach(function(t){
+            el.dispatchEvent(new KeyboardEvent(t,{key:'$key',bubbles:true}));});})();
+        """.trimIndent(), null)
     }
 
     // ── VIDEO CONTROLS ─────────────────────────────────────────────────────
@@ -328,36 +431,26 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { videoControls.visibility = View.VISIBLE }
             }
         }, "VideoBridge")
-
         view.evaluateJavascript("""
-            (function() {
-                if (document.querySelectorAll('video').length > 0) VideoBridge.onVideoFound(1);
-                new MutationObserver(function() {
-                    if (document.querySelectorAll('video').length > 0) VideoBridge.onVideoFound(1);
-                }).observe(document.body, {childList:true, subtree:true});
-            })();
+            (function(){if(document.querySelectorAll('video').length>0)VideoBridge.onVideoFound(1);
+            new MutationObserver(function(){if(document.querySelectorAll('video').length>0)
+            VideoBridge.onVideoFound(1);}).observe(document.body,{childList:true,subtree:true});})();
         """.trimIndent(), null)
     }
 
     private fun setupVideoControls() {
         videoControls.visibility = View.GONE
-
         btnVideoPlay.setOnClickListener {
-            activeWebView?.evaluateJavascript("""
-                (function(){var v=document.querySelector('video');
-                if(v){if(v.paused)v.play();else v.pause();}})();
-            """.trimIndent(), null)
+            activeWebView?.evaluateJavascript(
+                "(function(){var v=document.querySelector('video');if(v){if(v.paused)v.play();else v.pause();}})();", null)
         }
-
         btnVideoFullscreen.setOnClickListener {
             activeWebView?.evaluateJavascript("""
-                (function(){var v=document.querySelector('video');
-                if(!v)return;
+                (function(){var v=document.querySelector('video');if(!v)return;
                 if(v.requestFullscreen)v.requestFullscreen();
                 else if(v.webkitRequestFullscreen)v.webkitRequestFullscreen();})();
             """.trimIndent(), null)
         }
-
         btnVideoClose.setOnClickListener { videoControls.visibility = View.GONE }
     }
 
@@ -365,21 +458,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupSearchBar() {
         searchBar.visibility = View.GONE
-
         etSearch.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE) {
-                val query = etSearch.text.toString().trim()
-                if (query.isNotEmpty()) activeWebView?.findAllAsync(query)
+                val q = etSearch.text.toString().trim()
+                if (q.isNotEmpty()) activeWebView?.findAllAsync(q)
                 true
             } else false
         }
-
-        findViewById<ImageButton>(R.id.btnSearchNext).setOnClickListener {
-            activeWebView?.findNext(true)
-        }
-        findViewById<ImageButton>(R.id.btnSearchPrev).setOnClickListener {
-            activeWebView?.findNext(false)
-        }
+        findViewById<ImageButton>(R.id.btnSearchNext).setOnClickListener { activeWebView?.findNext(true) }
+        findViewById<ImageButton>(R.id.btnSearchPrev).setOnClickListener { activeWebView?.findNext(false) }
         findViewById<ImageButton>(R.id.btnSearchClose).setOnClickListener {
             activeWebView?.clearMatches()
             searchBar.visibility = View.GONE
@@ -396,51 +483,41 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnForward).setOnClickListener {
             if (activeWebView?.canGoForward() == true) activeWebView?.goForward()
         }
-        findViewById<ImageButton>(R.id.btnReload).setOnClickListener {
-            activeWebView?.reload()
-        }
-        findViewById<ImageButton>(R.id.btnNewTab).setOnClickListener {
-            openNewTab()
-        }
+        findViewById<ImageButton>(R.id.btnReload).setOnClickListener { activeWebView?.reload() }
+        findViewById<ImageButton>(R.id.btnNewTab).setOnClickListener { openNewTab() }
         findViewById<ImageButton>(R.id.btnSearch).setOnClickListener {
             searchBarVisible = !searchBarVisible
             searchBar.visibility = if (searchBarVisible) View.VISIBLE else View.GONE
-            if (searchBarVisible) {
-                etSearch.requestFocus()
-                showKeyboard(etSearch)
-            } else {
-                activeWebView?.clearMatches()
-            }
+            if (searchBarVisible) { etSearch.requestFocus(); showKeyboard(etSearch) }
+            else activeWebView?.clearMatches()
         }
-
-        // ── ADBLOCK TOGGLE ─────────────────────────────────────────────
         updateAdBlockBtn()
         btnAdBlock.setOnClickListener {
             AdBlocker.toggle()
             updateAdBlockBtn()
-            val msg = if (AdBlocker.enabled) "🛡️ Bloqueador activado" else "⚠️ Bloqueador desactivado"
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this,
+                if (AdBlocker.enabled) "🛡️ Bloqueador activado" else "⚠️ Bloqueador desactivado",
+                Toast.LENGTH_SHORT).show()
             activeWebView?.reload()
         }
     }
 
     private fun updateAdBlockBtn() {
         btnAdBlock.setColorFilter(
-            if (AdBlocker.enabled) 0xFF00ffc3.toInt() else 0xFF4a5568.toInt()
-        )
+            if (AdBlocker.enabled) 0xFF00ffc3.toInt() else 0xFF4a5568.toInt())
     }
 
     // ── UTILS ──────────────────────────────────────────────────────────────
 
     private fun hideKeyboard() {
-        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(etAddress.windowToken, 0)
+        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
+            .hideSoftInputFromWindow(etAddress.windowToken, 0)
         etAddress.clearFocus()
     }
 
     private fun showKeyboard(view: View) {
-        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
+        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
+            .showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
     }
 
     override fun onBackPressed() {
@@ -448,17 +525,13 @@ class MainActivity : AppCompatActivity() {
             customView != null -> {
                 @Suppress("DEPRECATION")
                 window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-                val root = window.decorView as FrameLayout
-                fullscreenContainer?.let { root.removeView(it) }
-                fullscreenContainer = null
-                customView = null
-                customViewCallback?.onCustomViewHidden()
-                customViewCallback = null
+                fullscreenContainer?.let { (window.decorView as FrameLayout).removeView(it) }
+                fullscreenContainer = null; customView = null
+                customViewCallback?.onCustomViewHidden(); customViewCallback = null
             }
             searchBarVisible -> {
                 activeWebView?.clearMatches()
-                searchBar.visibility = View.GONE
-                searchBarVisible = false
+                searchBar.visibility = View.GONE; searchBarVisible = false
             }
             activeWebView?.canGoBack() == true -> activeWebView?.goBack()
             else -> super.onBackPressed()
