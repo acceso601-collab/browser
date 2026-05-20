@@ -70,7 +70,7 @@ class MainActivity : AppCompatActivity() {
         setupBottomBar()
         setupMenuButton()
 
-        openNewTab("https://www.google.com")
+        restoreTabs()
     }
 
     // ── THEME ──────────────────────────────────────────────────────────────
@@ -536,5 +536,26 @@ class MainActivity : AppCompatActivity() {
             activeWebView?.canGoBack() == true -> activeWebView?.goBack()
             else -> super.onBackPressed()
         }
+    }
+
+    // ── RESTORE & SAVE TABS ────────────────────────────────────────────────
+
+    private fun restoreTabs() {
+        val (saved, activeIdx) = StorageManager.loadSavedTabs(this)
+        if (saved.isEmpty()) {
+            openNewTab("https://www.google.com")
+        } else {
+            saved.forEach { (url, _) -> openNewTab(url) }
+            switchTab(activeIdx.coerceIn(0, tabs.size - 1))
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        StorageManager.saveTabs(
+            this,
+            tabs.map { Pair(it.url, it.title) },
+            activeTabIndex
+        )
     }
 }
