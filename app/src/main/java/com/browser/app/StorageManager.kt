@@ -125,4 +125,31 @@ object StorageManager {
             (0 until arr.length()).map { arr.getJSONObject(it) }
         } catch (e: Exception) { emptyList() }
     }
+
+    // ── TABS ──────────────────────────────────────────────────────────────
+
+    fun saveTabs(ctx: Context, tabs: List<Pair<String, String>>, activeIndex: Int) {
+        val arr = JSONArray()
+        tabs.forEach { (url, title) ->
+            arr.put(JSONObject().apply { put("url", url); put("title", title) })
+        }
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString("saved_tabs", arr.toString())
+            .putInt("active_tab", activeIndex)
+            .apply()
+    }
+
+    fun loadSavedTabs(ctx: Context): Pair<List<Pair<String, String>>, Int> {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val json = prefs.getString("saved_tabs", "[]") ?: "[]"
+        val activeIndex = prefs.getInt("active_tab", 0)
+        return try {
+            val arr = JSONArray(json)
+            val list = (0 until arr.length()).map {
+                val obj = arr.getJSONObject(it)
+                Pair(obj.getString("url"), obj.optString("title", ""))
+            }.filter { it.first.isNotEmpty() }
+            Pair(list, activeIndex)
+        } catch (e: Exception) { Pair(emptyList(), 0) }
+    }
 }
