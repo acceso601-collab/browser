@@ -90,7 +90,6 @@ class MainActivity : AppCompatActivity() {
                 @Suppress("DEPRECATION")
                 wv.settings.forceDark = WebSettings.FORCE_DARK_ON
             } else {
-                // Android 9: inyectar CSS
                 wv.evaluateJavascript("""
                     (function(){
                         var s=document.createElement('style');
@@ -114,7 +113,7 @@ class MainActivity : AppCompatActivity() {
             .setSingleChoiceItems(options, current) { dialog, which ->
                 StorageManager.saveTheme(this, which)
                 dialog.dismiss()
-                recreate() // Reinicia la actividad con el nuevo tema
+                recreate()
             }
             .setNegativeButton("Cancelar", null)
             .show()
@@ -147,13 +146,11 @@ class MainActivity : AppCompatActivity() {
             val popup = PopupMenu(this, view)
             popup.menuInflater.inflate(R.menu.browser_menu, popup.menu)
 
-            // Cambiar texto de favorito si ya está guardado
             val currentUrl = tabs.getOrNull(activeTabIndex)?.url ?: ""
             val isFav = StorageManager.isFavorite(this, currentUrl)
             popup.menu.findItem(R.id.menu_favorite)?.title =
                 if (isFav) "💛 Quitar de favoritos" else "⭐ Añadir a favoritos"
 
-            // Modo escritorio
             popup.menu.findItem(R.id.menu_desktop)?.title =
                 if (desktopMode) "📱 Modo móvil" else "🖥️ Modo escritorio"
 
@@ -222,8 +219,20 @@ class MainActivity : AppCompatActivity() {
         rvTabs.adapter = tabAdapter
     }
 
+    /**
+     * Crea una nueva pestaña. IMPORTANTE: el objeto BrowserTab se crea PRIMERO
+     * y se captura por referencia directa (closure) en los WebViewClient /
+     * WebChromeClient — así cada callback sabe exactamente a qué pestaña
+     * pertenece sin depender de activeTabIndex (que puede cambiar mientras
+     * la página sigue cargando en segundo plano).
+     *
+     * switchToIt = false permite abrir varias pestañas en un bucle (al
+     * restaurar) sin ir saltando la pestaña activa en cada iteración.
+     */
     @SuppressLint("SetJavaScriptEnabled")
-    private fun openNewTab(url: String = "https://www.google.com") {
+    private fun openNewTab(url: String = "https://www.google.com", switchToIt: Boolean = true) {
+        val tab = BrowserTab(id = tabCounter++, url = url, title = "Cargando...")
+
         val wv = WebView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -240,18 +249,25 @@ class MainActivity : AppCompatActivity() {
                 mediaPlaybackRequiresUserGesture = false
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             }
-            webViewClient = buildWebViewClient()
-            webChromeClient = buildWebChromeClient()
+            webViewClient = buildWebViewClient(tab)
+            webChromeClient = buildWebChromeClient(tab)
         }
+
+        tab.webView = wv
         applyForcedDarkToWebView(wv)
 
-        val tab = BrowserTab(id = tabCounter++, webView = wv)
         tabs.add(tab)
         webContainer.addView(wv)
         wv.visibility = View.GONE
 
         tabAdapter.notifyItemInserted(tabs.size - 1)
-        switchTab(tabs.size - 1)
+
+        if (switchToIt) {
+            switchTab(tabs.size - 1)
+        } else {
+            tabAdapter.notifyItemChanged(tabs.size - 1)
+        }
+
         wv.loadUrl(url)
     }
 
@@ -268,7 +284,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun closeTab(index: Int) {
         if (tabs.size == 1) {
-            tabs[0].webView?.loadUrl("https://www.google.com"); return
+            tabs[0].webView?.loadUrl("https://www.google.com")
+            return
         }
         webContainer.removeView(tabs[index].webView)
         tabs.removeAt(index)
@@ -277,9 +294,40 @@ class MainActivity : AppCompatActivity() {
         switchTab(if (index >= tabs.size) tabs.size - 1 else index)
     }
 
-    // ── WEBVIEW CLIENTS ────────────────────────────────────────────────────
+    /**
+     * Restaura las pestañas guardadas. Las abre todas con switchToIt=false
+     * para que activeTabIndex no salte de pestaña en pestaña mientras las
+     * páginas siguen cargando en segundo plano (eso era lo que causaba el
+     * bug de títulos/URLs mezclados). Al final activa la que estaba activa
+     * cuando cerraste la app.
+     */
+    private fun restoreTabs() {
+        val (saved, activeIdx) = StorageManager.loadSavedTabs(this)
+        if (saved.isEmpty()) {
+            openNewTab("https://www.google.com")
+            return
+        }
+        saved.forEach { (url, _) ->
+            openNewTab(url, switchToIt = false)
+        }
+        switchTab(activeIdx.coerceIn(0, tabs.size - 1))
+    }
 
-    private fun buildWebViewClient() = object : WebViewClient() {
+    override fun onStop() {
+        super.onStop()
+        StorageManager.saveTabs(
+            this,
+            tabs.map { Pair(it.url, it.title) },
+            activeTabIndex
+        )
+    }
+
+    // ── WEBVIEW CLIENTS ────────────────────────────────────────────────────
+    // Reciben "tab" por closure y SOLO actualizan ese tab específico.
+    // La UI global (barra de dirección, progress bar) solo se toca si esa
+    // pestaña sigue siendo la activa en el momento del callback.
+
+    private fun buildWebViewClient(tab: BrowserTab) = object : WebViewClient() {
 
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             if (AdBlocker.shouldBlock(request)) return AdBlocker.getEmptyResponse()
@@ -287,24 +335,29 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
-            progressBar.visibility = View.VISIBLE
-            etAddress.setText(url)
-            tabs.getOrNull(activeTabIndex)?.url = url
+            tab.url = url
+            val idx = tabs.indexOfFirst { it.id == tab.id }
+            if (idx == activeTabIndex) {
+                progressBar.visibility = View.VISIBLE
+                etAddress.setText(url)
+            }
+            if (idx >= 0) tabAdapter.notifyItemChanged(idx)
         }
 
         override fun onPageFinished(view: WebView, url: String) {
-            progressBar.visibility = View.GONE
             val title = view.title ?: url
-            tabs.getOrNull(activeTabIndex)?.apply {
-                this.title = title
-                this.url = url
+            tab.title = title
+            tab.url = url
+
+            val idx = tabs.indexOfFirst { it.id == tab.id }
+            if (idx >= 0) tabAdapter.notifyItemChanged(idx)
+
+            if (idx == activeTabIndex) {
+                progressBar.visibility = View.GONE
+                etAddress.setText(url)
             }
-            tabAdapter.notifyItemChanged(activeTabIndex)
-            etAddress.setText(url)
 
-            // Guardar en historial
             StorageManager.addHistory(this@MainActivity, url, title)
-
             injectVideoDetector(view)
             view.evaluateJavascript(AdBlocker.getAdHidingCss(), null)
             applyForcedDarkToWebView(view)
@@ -315,16 +368,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildWebChromeClient() = object : WebChromeClient() {
+    private fun buildWebChromeClient(tab: BrowserTab) = object : WebChromeClient() {
 
         override fun onProgressChanged(view: WebView, newProgress: Int) {
-            progressBar.progress = newProgress
-            if (newProgress == 100) progressBar.visibility = View.GONE
+            val idx = tabs.indexOfFirst { it.id == tab.id }
+            if (idx == activeTabIndex) {
+                progressBar.progress = newProgress
+                if (newProgress == 100) progressBar.visibility = View.GONE
+            }
         }
 
         override fun onReceivedTitle(view: WebView, title: String) {
-            tabs.getOrNull(activeTabIndex)?.title = title
-            tabAdapter.notifyItemChanged(activeTabIndex)
+            tab.title = title
+            val idx = tabs.indexOfFirst { it.id == tab.id }
+            if (idx >= 0) tabAdapter.notifyItemChanged(idx)
         }
 
         override fun onShowCustomView(view: View, callback: CustomViewCallback) {
@@ -362,7 +419,9 @@ class MainActivity : AppCompatActivity() {
     private fun setupAddressBar() {
         etAddress.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
-                navigate(etAddress.text.toString().trim()); hideKeyboard(); true
+                navigate(etAddress.text.toString().trim())
+                hideKeyboard()
+                true
             } else false
         }
         etAddress.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) etAddress.selectAll() }
@@ -536,26 +595,5 @@ class MainActivity : AppCompatActivity() {
             activeWebView?.canGoBack() == true -> activeWebView?.goBack()
             else -> super.onBackPressed()
         }
-    }
-
-    // ── RESTORE & SAVE TABS ────────────────────────────────────────────────
-
-    private fun restoreTabs() {
-        val (saved, activeIdx) = StorageManager.loadSavedTabs(this)
-        if (saved.isEmpty()) {
-            openNewTab("https://www.google.com")
-        } else {
-            saved.forEach { (url, _) -> openNewTab(url) }
-            switchTab(activeIdx.coerceIn(0, tabs.size - 1))
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        StorageManager.saveTabs(
-            this,
-            tabs.map { Pair(it.url, it.title) },
-            activeTabIndex
-        )
     }
 }
