@@ -70,8 +70,31 @@ class MainActivity : AppCompatActivity() {
         setupBottomBar()
         setupMenuButton()
 
-        restoreTabs()
+        // ─── CAMBIO 1 ──────────────────────────────────────────────────────
+        // Reemplazo la llamada a restoreTabs() por este bloque que detecta
+        // si la app fue abierta desde un enlace externo (WhatsApp, etc.)
+        val incomingUrl = intent?.data?.toString()
+        if (incomingUrl != null) {
+            openNewTab(incomingUrl)   // abre directamente la URL recibida
+        } else {
+            restoreTabs()             // comportamiento normal: restaurar pestañas
+        }
+        // ──────────────────────────────────────────────────────────────────
     }
+
+    // ─── CAMBIO 2 ──────────────────────────────────────────────────────────
+    // Método necesario porque el Manifest usa launchMode="singleTask".
+    // Cuando la app ya está abierta y se recibe un nuevo intent (otro link),
+    // Android llama a onNewIntent en lugar de crear una nueva Activity.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val incomingUrl = intent.data?.toString()
+        if (incomingUrl != null) {
+            openNewTab(incomingUrl)
+        }
+    }
+    // ──────────────────────────────────────────────────────────────────────
 
     // ── THEME ──────────────────────────────────────────────────────────────
 
