@@ -2,9 +2,11 @@ package com.browser.app
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.view.*
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -15,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
@@ -70,22 +73,16 @@ class MainActivity : AppCompatActivity() {
         setupBottomBar()
         setupMenuButton()
 
-        // ─── CAMBIO 1 ──────────────────────────────────────────────────────
-        // Reemplazo la llamada a restoreTabs() por este bloque que detecta
-        // si la app fue abierta desde un enlace externo (WhatsApp, etc.)
+        // ─── CAMBIO 1 (URL externa) ─────────────────────────────────────
         val incomingUrl = intent?.data?.toString()
         if (incomingUrl != null) {
-            openNewTab(incomingUrl)   // abre directamente la URL recibida
+            openNewTab(incomingUrl)
         } else {
-            restoreTabs()             // comportamiento normal: restaurar pestañas
+            restoreTabs()
         }
-        // ──────────────────────────────────────────────────────────────────
     }
 
-    // ─── CAMBIO 2 ──────────────────────────────────────────────────────────
-    // Método necesario porque el Manifest usa launchMode="singleTask".
-    // Cuando la app ya está abierta y se recibe un nuevo intent (otro link),
-    // Android llama a onNewIntent en lugar de crear una nueva Activity.
+    // ─── CAMBIO 2 (onNewIntent) ──────────────────────────────────────────
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -94,7 +91,6 @@ class MainActivity : AppCompatActivity() {
             openNewTab(incomingUrl)
         }
     }
-    // ──────────────────────────────────────────────────────────────────────
 
     // ── THEME ──────────────────────────────────────────────────────────────
 
@@ -199,6 +195,11 @@ class MainActivity : AppCompatActivity() {
                         startActivityForResult(
                             Intent(this, HistoryActivity::class.java), REQ_HISTORY)
                     }
+                    // ─── CAMBIO 3 (descargas en menú) ──────────────────
+                    R.id.menu_downloads -> {
+                        startActivity(Intent(this, DownloadsActivity::class.java))
+                    }
+                    // ─────────────────────────────────────────────────────
                     R.id.menu_theme -> showThemeDialog()
                     R.id.menu_desktop -> toggleDesktopMode()
                 }
@@ -242,16 +243,6 @@ class MainActivity : AppCompatActivity() {
         rvTabs.adapter = tabAdapter
     }
 
-    /**
-     * Crea una nueva pestaña. IMPORTANTE: el objeto BrowserTab se crea PRIMERO
-     * y se captura por referencia directa (closure) en los WebViewClient /
-     * WebChromeClient — así cada callback sabe exactamente a qué pestaña
-     * pertenece sin depender de activeTabIndex (que puede cambiar mientras
-     * la página sigue cargando en segundo plano).
-     *
-     * switchToIt = false permite abrir varias pestañas en un bucle (al
-     * restaurar) sin ir saltando la pestaña activa en cada iteración.
-     */
     @SuppressLint("SetJavaScriptEnabled")
     private fun openNewTab(url: String = "https://www.google.com", switchToIt: Boolean = true) {
         val tab = BrowserTab(id = tabCounter++, url = url, title = "Cargando...")
@@ -274,6 +265,34 @@ class MainActivity : AppCompatActivity() {
             }
             webViewClient = buildWebViewClient(tab)
             webChromeClient = buildWebChromeClient(tab)
+
+            // ─── CAMBIO 5 (descarga directa) ──────────────────────────
+            setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+                try {
+                    val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
+                    val request = DownloadManager.Request(android.net.Uri.parse(url)).apply {
+                        setMimeType(mimeType)
+                        addRequestHeader("User-Agent", userAgent)
+                        setDescription("Descargando archivo...")
+                        setTitle(fileName)
+                        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                        setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                        setAllowedOverMetered(true)
+                        setAllowedOverRoaming(true)
+                    }
+                    val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+                    dm.enqueue(request)
+                    val destPath = File(
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                        fileName
+                    ).absolutePath
+                    StorageManager.addDownload(this@MainActivity, destPath)
+                    Toast.makeText(this@MainActivity, "📥 Descargando: $fileName", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "❌ Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+            // ─────────────────────────────────────────────────────────────
         }
 
         tab.webView = wv
@@ -317,13 +336,6 @@ class MainActivity : AppCompatActivity() {
         switchTab(if (index >= tabs.size) tabs.size - 1 else index)
     }
 
-    /**
-     * Restaura las pestañas guardadas. Las abre todas con switchToIt=false
-     * para que activeTabIndex no salte de pestaña en pestaña mientras las
-     * páginas siguen cargando en segundo plano (eso era lo que causaba el
-     * bug de títulos/URLs mezclados). Al final activa la que estaba activa
-     * cuando cerraste la app.
-     */
     private fun restoreTabs() {
         val (saved, activeIdx) = StorageManager.loadSavedTabs(this)
         if (saved.isEmpty()) {
@@ -346,9 +358,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ── WEBVIEW CLIENTS ────────────────────────────────────────────────────
-    // Reciben "tab" por closure y SOLO actualizan ese tab específico.
-    // La UI global (barra de dirección, progress bar) solo se toca si esa
-    // pestaña sigue siendo la activa en el momento del callback.
 
     private fun buildWebViewClient(tab: BrowserTab) = object : WebViewClient() {
 
