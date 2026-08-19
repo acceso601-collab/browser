@@ -108,6 +108,36 @@ object StorageManager {
             .getInt(KEY_THEME, THEME_DARK)
     }
 
+    // ── DOWNLOADS ─────────────────────────────────────────────────────────
+    // (AÑADIDO SEGÚN StorageManager_additions.kt)
+
+    data class DownloadRecord(val path: String, val timestamp: Long)
+
+    private const val KEY_DOWNLOADS = "downloads"
+
+    fun addDownload(ctx: Context, path: String) {
+        val list = getDownloads(ctx).toMutableList()
+        list.removeAll { it.path == path }
+        list.add(0, DownloadRecord(path, System.currentTimeMillis()))
+        saveList(ctx, KEY_DOWNLOADS, list.map {
+            JSONObject().apply { put("path", it.path); put("ts", it.timestamp) }
+        })
+    }
+
+    fun removeDownload(ctx: Context, path: String) {
+        val list = getDownloads(ctx).toMutableList()
+        list.removeAll { it.path == path }
+        saveList(ctx, KEY_DOWNLOADS, list.map {
+            JSONObject().apply { put("path", it.path); put("ts", it.timestamp) }
+        })
+    }
+
+    fun getDownloads(ctx: Context): List<DownloadRecord> {
+        return loadList(ctx, KEY_DOWNLOADS).map {
+            DownloadRecord(it.getString("path"), it.optLong("ts"))
+        }
+    }
+
     // ── UTILS ─────────────────────────────────────────────────────────────
 
     private fun saveList(ctx: Context, key: String, items: List<JSONObject>) {
