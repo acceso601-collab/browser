@@ -5,6 +5,7 @@
     <item android:id="@+id/menu_favorites"   android:title="📌 Mis favoritos" />
     <item android:id="@+id/menu_history"     android:title="📚 Historial" />
     <item android:id="@+id/menu_downloads"   android:title="📥 Descargas" />
+    <item android:id="@+id/menu_passwords"   android:title="🔑 Contraseñas" />
     <item android:id="@+id/menu_theme"       android:title="🎨 Tema" />
     <item android:id="@+id/menu_desktop"     android:title="🖥️ Modo escritorio" />
 

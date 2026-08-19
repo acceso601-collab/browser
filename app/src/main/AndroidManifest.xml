@@ -46,8 +46,8 @@
         <activity android:name=".HistoryActivity" android:exported="false" />
         <activity android:name=".FavoritesActivity" android:exported="false" />
         <activity android:name=".DownloadsActivity" android:exported="false" />
+        <activity android:name=".PasswordsActivity" android:exported="false" />
 
-        <!-- FileProvider para abrir archivos descargados -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"

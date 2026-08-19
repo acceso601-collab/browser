@@ -2,9 +2,11 @@ package com.browser.app
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.view.*
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -15,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
@@ -70,22 +73,14 @@ class MainActivity : AppCompatActivity() {
         setupBottomBar()
         setupMenuButton()
 
-        // ─── CAMBIO 1 ──────────────────────────────────────────────────────
-        // Reemplazo la llamada a restoreTabs() por este bloque que detecta
-        // si la app fue abierta desde un enlace externo (WhatsApp, etc.)
         val incomingUrl = intent?.data?.toString()
         if (incomingUrl != null) {
-            openNewTab(incomingUrl)   // abre directamente la URL recibida
+            openNewTab(incomingUrl)
         } else {
-            restoreTabs()             // comportamiento normal: restaurar pestañas
+            restoreTabs()
         }
-        // ──────────────────────────────────────────────────────────────────
     }
 
-    // ─── CAMBIO 2 ──────────────────────────────────────────────────────────
-    // Método necesario porque el Manifest usa launchMode="singleTask".
-    // Cuando la app ya está abierta y se recibe un nuevo intent (otro link),
-    // Android llama a onNewIntent en lugar de crear una nueva Activity.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -94,7 +89,6 @@ class MainActivity : AppCompatActivity() {
             openNewTab(incomingUrl)
         }
     }
-    // ──────────────────────────────────────────────────────────────────────
 
     // ── THEME ──────────────────────────────────────────────────────────────
 
@@ -199,6 +193,12 @@ class MainActivity : AppCompatActivity() {
                         startActivityForResult(
                             Intent(this, HistoryActivity::class.java), REQ_HISTORY)
                     }
+                    R.id.menu_downloads -> {
+                        startActivity(Intent(this, DownloadsActivity::class.java))
+                    }
+                    R.id.menu_passwords -> {
+                        startActivity(Intent(this, PasswordsActivity::class.java))
+                    }
                     R.id.menu_theme -> showThemeDialog()
                     R.id.menu_desktop -> toggleDesktopMode()
                 }
@@ -242,16 +242,6 @@ class MainActivity : AppCompatActivity() {
         rvTabs.adapter = tabAdapter
     }
 
-    /**
-     * Crea una nueva pestaña. IMPORTANTE: el objeto BrowserTab se crea PRIMERO
-     * y se captura por referencia directa (closure) en los WebViewClient /
-     * WebChromeClient — así cada callback sabe exactamente a qué pestaña
-     * pertenece sin depender de activeTabIndex (que puede cambiar mientras
-     * la página sigue cargando en segundo plano).
-     *
-     * switchToIt = false permite abrir varias pestañas en un bucle (al
-     * restaurar) sin ir saltando la pestaña activa en cada iteración.
-     */
     @SuppressLint("SetJavaScriptEnabled")
     private fun openNewTab(url: String = "https://www.google.com", switchToIt: Boolean = true) {
         val tab = BrowserTab(id = tabCounter++, url = url, title = "Cargando...")
@@ -274,6 +264,32 @@ class MainActivity : AppCompatActivity() {
             }
             webViewClient = buildWebViewClient(tab)
             webChromeClient = buildWebChromeClient(tab)
+
+            setDownloadListener { url2, userAgent, contentDisposition, mimeType, _ ->
+                try {
+                    val fileName = URLUtil.guessFileName(url2, contentDisposition, mimeType)
+                    val request = DownloadManager.Request(android.net.Uri.parse(url2)).apply {
+                        setMimeType(mimeType)
+                        addRequestHeader("User-Agent", userAgent)
+                        setDescription("Descargando archivo...")
+                        setTitle(fileName)
+                        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                        setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                        setAllowedOverMetered(true)
+                        setAllowedOverRoaming(true)
+                    }
+                    val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+                    dm.enqueue(request)
+                    val destPath = File(
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                        fileName
+                    ).absolutePath
+                    StorageManager.addDownload(this@MainActivity, destPath)
+                    Toast.makeText(this@MainActivity, "📥 Descargando: $fileName", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "❌ Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
 
         tab.webView = wv
@@ -317,13 +333,6 @@ class MainActivity : AppCompatActivity() {
         switchTab(if (index >= tabs.size) tabs.size - 1 else index)
     }
 
-    /**
-     * Restaura las pestañas guardadas. Las abre todas con switchToIt=false
-     * para que activeTabIndex no salte de pestaña en pestaña mientras las
-     * páginas siguen cargando en segundo plano (eso era lo que causaba el
-     * bug de títulos/URLs mezclados). Al final activa la que estaba activa
-     * cuando cerraste la app.
-     */
     private fun restoreTabs() {
         val (saved, activeIdx) = StorageManager.loadSavedTabs(this)
         if (saved.isEmpty()) {
@@ -346,9 +355,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ── WEBVIEW CLIENTS ────────────────────────────────────────────────────
-    // Reciben "tab" por closure y SOLO actualizan ese tab específico.
-    // La UI global (barra de dirección, progress bar) solo se toca si esa
-    // pestaña sigue siendo la activa en el momento del callback.
 
     private fun buildWebViewClient(tab: BrowserTab) = object : WebViewClient() {
 
@@ -382,6 +388,8 @@ class MainActivity : AppCompatActivity() {
 
             StorageManager.addHistory(this@MainActivity, url, title)
             injectVideoDetector(view)
+            injectLoginDetector(view, url)
+            injectAutofill(view, url)
             view.evaluateJavascript(AdBlocker.getAdHidingCss(), null)
             applyForcedDarkToWebView(view)
         }
@@ -435,6 +443,100 @@ class MainActivity : AppCompatActivity() {
             customViewCallback?.onCustomViewHidden()
             customViewCallback = null
         }
+    }
+
+    // ── PASSWORD AUTOFILL ──────────────────────────────────────────────────
+
+    /**
+     * Si ya hay credenciales guardadas para este dominio, las rellena
+     * automáticamente en los campos de usuario/contraseña detectados.
+     */
+    private fun injectAutofill(view: WebView, url: String) {
+        val creds = PasswordManager.getForDomain(this, url)
+        if (creds.isEmpty()) return
+        val cred = creds.first() // usa la más reciente si hay varias
+
+        val user = cred.username.replace("'", "\\'")
+        val pass = cred.password.replace("'", "\\'")
+
+        val js = """
+            (function() {
+                function setNativeValue(el, value) {
+                    var setter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value').set;
+                    setter.call(el, value);
+                    el.dispatchEvent(new Event('input', {bubbles:true}));
+                    el.dispatchEvent(new Event('change', {bubbles:true}));
+                }
+                var inputs = document.querySelectorAll('input');
+                var userField = null, passField = null;
+                inputs.forEach(function(el) {
+                    if (!el.offsetParent) return;
+                    if (el.type === 'password') { passField = el; }
+                    else if ((el.type === 'text' || el.type === 'email' || el.type === '') && !userField) {
+                        userField = el;
+                    }
+                });
+                if (userField) setNativeValue(userField, '$user');
+                if (passField) setNativeValue(passField, '$pass');
+            })();
+        """.trimIndent()
+
+        view.evaluateJavascript(js, null)
+    }
+
+    /**
+     * Detecta cuando el usuario envía un formulario de login (campo de
+     * password + campo de texto) y ofrece guardar las credenciales.
+     */
+    private fun injectLoginDetector(view: WebView, url: String) {
+        view.addJavascriptInterface(object {
+            @JavascriptInterface
+            fun onLoginSubmit(username: String, password: String) {
+                runOnUiThread {
+                    offerSaveCredentials(url, username, password)
+                }
+            }
+        }, "PasswordBridge")
+
+        val js = """
+            (function() {
+                if (window.__pwInjected) return;
+                window.__pwInjected = true;
+                document.addEventListener('submit', function(e) {
+                    var form = e.target;
+                    if (!form || form.tagName !== 'FORM') return;
+                    var passField = form.querySelector('input[type=password]');
+                    if (!passField || !passField.value) return;
+                    var userField = form.querySelector(
+                        'input[type=text], input[type=email], input[name*=user], input[id*=user]');
+                    var username = userField ? userField.value : '';
+                    if (username) {
+                        PasswordBridge.onLoginSubmit(username, passField.value);
+                    }
+                }, true);
+            })();
+        """.trimIndent()
+
+        view.evaluateJavascript(js, null)
+    }
+
+    private fun offerSaveCredentials(url: String, username: String, password: String) {
+        val domain = PasswordManager.domainFromUrl(url)
+        // Evitar preguntar de nuevo si ya está guardado exactamente igual
+        val already = PasswordManager.getForDomain(this, url)
+            .any { it.username == username && it.password == password }
+        if (already) return
+
+        AlertDialog.Builder(this)
+            .setTitle("🔑 Guardar contraseña")
+            .setMessage("¿Guardar el usuario y contraseña para $domain?")
+            .setPositiveButton("Guardar") { _, _ ->
+                PasswordManager.save(this, url, username, password)
+                Toast.makeText(this, "✅ Contraseña guardada", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("No, gracias", null)
+            .show()
     }
 
     // ── ADDRESS BAR ────────────────────────────────────────────────────────
