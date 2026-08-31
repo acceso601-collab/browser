@@ -36,11 +36,11 @@ class TabAdapter(
         holder.tvTitle.text = tab.title.take(16).ifEmpty { "Nueva pestaña" }
 
         val isActive = position == activeIndex
-        holder.itemView.setBackgroundColor(
-            if (isActive) 0xFF1e2d40.toInt() else 0xFF0d1117.toInt()
+        holder.itemView.setBackgroundResource(
+            if (isActive) R.drawable.bg_tab_active else R.drawable.bg_tab_inactive
         )
         holder.tvTitle.setTextColor(
-            if (isActive) 0xFF00ffc3.toInt() else 0xFF8899aa.toInt()
+            if (isActive) 0xFF00ffc3.toInt() else 0xFF7a8899.toInt()
         )
 
         holder.itemView.setOnClickListener { onTabClick(position) }
