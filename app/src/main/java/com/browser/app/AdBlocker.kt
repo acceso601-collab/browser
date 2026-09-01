@@ -12,7 +12,7 @@ object AdBlocker {
         return enabled
     }
 
-    // ── DOMINIOS BLOQUEADOS (ampliado) ──────────────────────────────────────
+    // ── DOMINIOS BLOQUEADOS ──────────────────────────────────────────────────
     private val blockedDomains = setOf(
         // Google Ads / Analytics
         "doubleclick.net", "googlesyndication.com", "googleadservices.com",
@@ -20,36 +20,36 @@ object AdBlocker {
         "adservice.google.com", "pagead2.googlesyndication.com",
         "tpc.googlesyndication.com", "googleads.g.doubleclick.net",
         "static.doubleclick.net", "stats.g.doubleclick.net",
-        "www.googleadservices.com", "partner.googleadservices.com",
 
-        // YouTube ads específicamente
-        "ads.youtube.com", "ad.youtube.com", "youtube.com/api/stats/ads",
-        "youtube.com/pagead", "youtube.com/ptracking",
+        // YouTube ads
+        "ads.youtube.com", "ad.youtube.com", "imasdk.googleapis.com",
 
-        // Facebook / Meta
-        "connect.facebook.net", "facebook.com/tr", "an.facebook.com",
-
-        // Amazon
-        "amazon-adsystem.com", "assoc-amazon.com", "aax.amazon-adsystem.com",
+        // Facebook / Amazon
+        "connect.facebook.net", "facebook.com/tr", "amazon-adsystem.com",
 
         // Redes de anuncios y video ads
         "adnxs.com", "adsrvr.org", "adform.net", "advertising.com",
         "adcolony.com", "admob.com", "adroll.com", "ads.twitter.com",
-        "ads.linkedin.com", "mediamath.com", "moatads.com", "openx.net",
-        "pubmatic.com", "rubiconproject.com", "scorecardresearch.com",
-        "taboola.com", "outbrain.com", "revcontent.com", "mgid.com",
-        "criteo.com", "criteo.net", "thetradedesk.com", "casalemedia.com",
-        "sharethrough.com", "spotxchange.com", "spotx.tv", "sonobi.com",
-        "appnexus.com", "zedo.com", "yieldmanager.com", "smartadserver.com",
-        "adition.com", "improvedigital.com", "indexexchange.com",
-        "33across.com", "triplelift.com", "teads.tv", "unruly.co",
-        "videoplayerhub.com", "vidible.tv", "brightcove.net",
-        "innovid.com", "tremorhub.com", "adsafeprotected.com",
-        "doubleverify.com", "adtechus.com", "conversantmedia.com",
-        "flashtalking.com", "bidswitch.net", "rlcdn.com",
-        "adkernel.com", "gumgum.com", "lkqd.net", "springserve.com",
-        "vungle.com", "chartboost.com", "applovin.com",
-        "ironsrc.com", "unityads.unity3d.com",
+        "mediamath.com", "moatads.com", "openx.net", "pubmatic.com",
+        "rubiconproject.com", "scorecardresearch.com", "taboola.com",
+        "outbrain.com", "revcontent.com", "mgid.com", "criteo.com",
+        "criteo.net", "thetradedesk.com", "casalemedia.com", "sharethrough.com",
+        "spotxchange.com", "spotx.tv", "sonobi.com", "appnexus.com", "zedo.com",
+        "smartadserver.com", "indexexchange.com", "33across.com", "triplelift.com",
+        "teads.tv", "unruly.co", "videoplayerhub.com", "vidible.tv",
+        "brightcove.net", "innovid.com", "tremorhub.com", "adsafeprotected.com",
+        "doubleverify.com", "conversantmedia.com", "flashtalking.com",
+        "bidswitch.net", "rlcdn.com", "adkernel.com", "gumgum.com",
+        "lkqd.net", "springserve.com", "vungle.com", "chartboost.com",
+        "applovin.com", "ironsrc.com", "unityads.unity3d.com",
+
+        // Redes de popunder / redirect agresivas
+        "popcash.net", "popads.net", "clkrev.com", "realsrv.com",
+        "trafficjunky.net", "exoclick.com", "juicyads.com", "plugrush.com",
+        "tsyndicate.com", "propellerads.com", "adsterra.com", "hilltopads.net",
+        "clickadu.com", "adcash.com", "richads.com", "monetag.com",
+        "popunder.net", "adreactor.com", "trafficfactory.biz", "popin.cc",
+        "adf.ly", "shorte.st", "linkbucks.com", "adshort.co", "ouo.io", "bc.vc",
 
         // Trackers
         "hotjar.com", "segment.com", "segment.io", "mixpanel.com",
@@ -59,23 +59,16 @@ object AdBlocker {
         "branch.io", "appsflyer.com", "crazyegg.com", "clicktale.net",
         "mouseflow.com", "luckyorange.com",
 
-        // Popups / redirects agresivos
-        "popcash.net", "popads.net", "pop.clicksfly.com", "clkrev.com",
-        "realsrv.com", "trafficjunky.net", "exoclick.com", "juicyads.com",
-        "plugrush.com", "tsyndicate.com", "propellerads.com",
-        "adsterra.com", "hilltopads.net", "clickadu.com", "adcash.com",
-        "mgid.com", "richads.com", "monetag.com",
-
         // Crypto miners
         "coinhive.com", "coin-hive.com", "cryptoloot.pro", "jsecoin.com",
-        "minero.cc", "webminerpool.com",
-
-        // Periódicos / paywalls con overlays de anuncios comunes
-        "cliqz.com", "criteo.com", "permutive.com", "chartbeat.com",
-        "adsafeprotected.com", "moatpixel.com", "serving-sys.com"
+        "minero.cc", "webminerpool.com"
     )
 
     // ── PATRONES EN LA URL ───────────────────────────────────────────────────
+    // Nota: se evitan patrones demasiado genéricos como "ref=", "aff=",
+    // "/go/", "/click/", "/download/" porque coinciden con URLs de sitios
+    // completamente normales (tiendas, tu propio gestor de descargas, etc.)
+    // y bloquearían contenido legítimo, no solo anuncios.
     private val blockedPatterns = listOf(
         "/ads/", "/ad/", "/adserver/", "/advertisement", "/banner",
         "/tracking", "/pixel.gif", "/pixel.png", "/beacon.",
@@ -85,8 +78,8 @@ object AdBlocker {
         "/adserve", "/adunit", "ad_type=", "adunit=", "/preroll",
         "/midroll", "/postroll", "video_ad", "videoads",
         "/gpt.js", "/gpt/pubads", "outstream", "instream_ad",
-        "/ads.js", "/ad.js", "sponsored-", "/promo/ad",
-        "affiliate-ad", "nativead", "/skinads"
+        "/ads.js", "/ad.js", "sponsored-", "/promo/ad", "nativead",
+        "popunder", "prestitial", "/popads", "/popcash"
     )
 
     private val emptyResponse = WebResourceResponse(
@@ -105,19 +98,23 @@ object AdBlocker {
     fun getEmptyResponse(): WebResourceResponse = emptyResponse
 
     /**
-     * CSS + JS combinado:
-     * 1. Oculta elementos visuales de anuncios (banners, overlays)
-     * 2. Bloquea window.open / popups no solicitados
-     * 3. Detecta y hace clic automáticamente en botones "Saltar anuncio"
-     *    de reproductores de video genéricos
-     * 4. Vuelve a ejecutarse cada vez que el DOM cambia (SPA / lazy load)
+     * CSS + JS:
+     * 1. Oculta elementos de anuncios usando selectores ESPECÍFICOS
+     *    (no términos genéricos como "container"/"wrapper"/"player" que
+     *    también los usan reproductores y layouts legítimos).
+     * 2. Bloquea window.open (popups) — de forma segura, sin tocar
+     *    window.location (eso rompía el script y además navegación normal).
+     * 3. Detecta y hace clic en botones "Saltar anuncio" de reproductores.
+     * 4. Bloquea SOLO clics en links que apuntan directo a dominios de
+     *    redes de popunder conocidas — no bloquea clics genéricos en
+     *    "overlay"/"player" que podrían ser el video real.
      */
     fun getAdHidingCss(): String = if (!enabled) "" else """
         (function() {
             if (window.__novaAdblockActive) return;
             window.__novaAdblockActive = true;
 
-            // ── 1. CSS: ocultar elementos de anuncios visibles ──────────
+            // ── 1. CSS: ocultar elementos de anuncios específicos ────────
             var style = document.createElement('style');
             style.textContent = [
                 '[class*="banner-ad"]', '[class*="google-ad"]',
@@ -130,35 +127,42 @@ object AdBlocker {
                 '.taboola-widget', '.outbrain-widget',
                 '#taboola-below-article', 'aside[data-type="ad"]',
                 '[class*="video-ads"]', '[class*="ad-overlay"]',
-                '[class*="preroll"]', '[class*="ima-ad"]',
+                '[class*="preroll-ad"]', '[class*="ima-ad"]',
                 '.ytp-ad-module', '.ytp-ad-overlay-container',
                 '.video-ads.ytp-ad-module', 'ytd-promoted-video-renderer',
-                '[class*="popup-ad"]', '[class*="interstitial"]',
+                '[class*="popup-ad"]', '[class*="ad-interstitial"]',
                 '[class*="modal-ad"]', '[id*="sticky-ad"]',
-                '[class*="sticky-ad"]', '[class*="floating-ad"]'
+                '[class*="sticky-ad"]', '[class*="floating-ad"]',
+                '[class*="popunder"]'
             ].join(',') + ' { display:none !important; visibility:hidden !important; height:0 !important; }';
             document.head.appendChild(style);
 
-            // ── 2. Bloquear popups no solicitados ────────────────────────
-            var originalOpen = window.open;
+            // ── 2. Bloquear popups (window.open) — seguro, no rompe nada ─
             window.open = function(url) {
                 console.log('[AdBlock] Popup bloqueado: ' + url);
                 return null;
             };
 
-            // Bloquear listeners de click que abren popups en overlays sospechosos
+            // ── 3. Bloquear SOLO clics en links a redes de popunder ──────
+            var popunderHosts = [
+                'popcash', 'popads', 'propellerads', 'adsterra', 'monetag',
+                'exoclick', 'juicyads', 'trafficjunky', 'clkrev', 'realsrv',
+                'hilltopads', 'clickadu', 'adcash', 'richads'
+            ];
             document.addEventListener('click', function(e) {
                 var t = e.target;
-                var cls = (t.className || '').toString().toLowerCase();
-                if (cls.indexOf('popup') !== -1 || cls.indexOf('interstitial') !== -1) {
-                    e.stopPropagation();
+                while (t && t.tagName !== 'A') t = t.parentElement;
+                if (!t || !t.href) return;
+                var href = t.href.toLowerCase();
+                if (popunderHosts.some(function(h) { return href.indexOf(h) !== -1; })) {
                     e.preventDefault();
+                    e.stopPropagation();
+                    console.log('[AdBlock] Enlace de popunder bloqueado: ' + href);
                 }
             }, true);
 
-            // ── 3. Auto-saltar anuncios de video (YouTube y genéricos) ───
+            // ── 4. Auto-saltar anuncios de video ──────────────────────────
             function skipVideoAds() {
-                // YouTube: botón "Saltar anuncio"
                 var skipBtns = document.querySelectorAll(
                     '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, ' +
                     '[class*="skip-ad"], [class*="ad-skip"], ' +
@@ -168,18 +172,6 @@ object AdBlocker {
                     if (btn.offsetParent !== null) btn.click();
                 });
 
-                // Reproductores genéricos: si el video tiene clase/id de anuncio,
-                // intentar avanzarlo al final para que termine rápido
-                var adVideos = document.querySelectorAll(
-                    'video[class*="ad"], video[id*="ad"], [class*="ad-player"] video'
-                );
-                adVideos.forEach(function(v) {
-                    if (v.duration && v.duration < 60) {
-                        try { v.currentTime = v.duration; } catch(e) {}
-                    }
-                });
-
-                // Cerrar overlays de anuncio con botón "X" o "Cerrar"
                 var closeBtns = document.querySelectorAll(
                     '[class*="ad-close"], [class*="close-ad"], ' +
                     '[aria-label*="Close ad"], [aria-label*="Cerrar anuncio"]'
@@ -189,10 +181,8 @@ object AdBlocker {
                 });
             }
 
-            // Ejecutar cada segundo (los anuncios de video suelen tardar en aparecer)
             setInterval(skipVideoAds, 1000);
 
-            // ── 4. Reobservar cuando el DOM cambia (SPA, lazy load) ──────
             var observer = new MutationObserver(function() {
                 skipVideoAds();
             });
