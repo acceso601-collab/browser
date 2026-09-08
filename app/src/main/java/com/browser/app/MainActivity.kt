@@ -1,6 +1,9 @@
 package com.browser.app
 
 import android.annotation.SuppressLint
+import android.net.Uri
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import android.app.Activity
 import android.app.DownloadManager
 import android.content.Intent
@@ -48,6 +51,8 @@ class MainActivity : AppCompatActivity() {
     private var desktopMode = false
 
     // Fullscreen video
+private var filePathCallback: ValueCallback<Array<Uri>>? = null
+private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var fullscreenContainer: FrameLayout? = null
@@ -60,6 +65,14 @@ class MainActivity : AppCompatActivity() {
     private val activeWebView get() = tabs.getOrNull(activeTabIndex)?.webView
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        fileChooserLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            val data = if (result.resultCode == Activity.RESULT_OK) result.data else null
+            val results = WebChromeClient.FileChooserParams.parseResult(result.resultCode, data)
+            filePathCallback?.onReceiveValue(results)
+            filePathCallback = null
+        }
         applyTheme()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -487,9 +500,89 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onReceivedTitle(view: WebView, title: String) {
+ 
+        override fun onShowFileChooser(
+            webView: WebView,
+            callback: ValueCallback<Array<Uri>>,
+            fileChooserParams: FileChooserParams
+        ): Boolean {
+            filePathCallback = callback
+            val intent = fileChooserParams.createIntent()
+            return try {
+                fileChooserLauncher.launch(intent)
+                true
+            } catch (e: Exception) {
+                filePathCallback = null
+                false
+            }
+        }
             tab.title = title
+ 
+        override fun onShowFileChooser(
+            webView: WebView,
+            callback: ValueCallback<Array<Uri>>,
+            fileChooserParams: FileChooserParams
+        ): Boolean {
+            filePathCallback = callback
+            val intent = fileChooserParams.createIntent()
+            return try {
+                fileChooserLauncher.launch(intent)
+                true
+            } catch (e: Exception) {
+                filePathCallback = null
+                false
+            }
+        }
             val idx = tabs.indexOfFirst { it.id == tab.id }
+ 
+        override fun onShowFileChooser(
+            webView: WebView,
+            callback: ValueCallback<Array<Uri>>,
+            fileChooserParams: FileChooserParams
+        ): Boolean {
+            filePathCallback = callback
+            val intent = fileChooserParams.createIntent()
+            return try {
+                fileChooserLauncher.launch(intent)
+                true
+            } catch (e: Exception) {
+                filePathCallback = null
+                false
+            }
+        }
             if (idx >= 0) tabAdapter.notifyItemChanged(idx)
+ 
+        override fun onShowFileChooser(
+            webView: WebView,
+            callback: ValueCallback<Array<Uri>>,
+            fileChooserParams: FileChooserParams
+        ): Boolean {
+            filePathCallback = callback
+            val intent = fileChooserParams.createIntent()
+            return try {
+                fileChooserLauncher.launch(intent)
+                true
+            } catch (e: Exception) {
+                filePathCallback = null
+                false
+            }
+        }
+        }
+ 
+        override fun onShowFileChooser(
+            webView: WebView,
+            callback: ValueCallback<Array<Uri>>,
+            fileChooserParams: FileChooserParams
+        ): Boolean {
+            filePathCallback = callback
+            val intent = fileChooserParams.createIntent()
+            return try {
+                fileChooserLauncher.launch(intent)
+                true
+            } catch (e: Exception) {
+                filePathCallback = null
+                false
+            }
         }
 
         override fun onShowCustomView(view: View, callback: CustomViewCallback) {
