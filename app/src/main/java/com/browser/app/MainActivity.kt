@@ -334,6 +334,10 @@ class MainActivity : AppCompatActivity() {
                 // acelerando notablemente la recarga de páginas visitadas.
                 cacheMode = WebSettings.LOAD_DEFAULT
                 databaseEnabled = true
+
+                // Identificarse como Chrome normal, no como WebView embebido
+                // (Google bloquea funciones como "Imágenes" cuando detecta "wv" en el UA)
+                userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
             }
             webViewClient = buildWebViewClient(tab)
             webChromeClient = buildWebChromeClient(tab)
