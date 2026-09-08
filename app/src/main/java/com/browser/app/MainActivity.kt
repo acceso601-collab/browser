@@ -199,6 +199,9 @@ class MainActivity : AppCompatActivity() {
                     R.id.menu_passwords -> {
                         startActivity(Intent(this, PasswordsActivity::class.java))
                     }
+                    R.id.menu_clear_cache -> {
+                        showClearCacheDialog()
+                    }
                     R.id.menu_theme -> showThemeDialog()
                     R.id.menu_desktop -> toggleDesktopMode()
                 }
@@ -206,6 +209,70 @@ class MainActivity : AppCompatActivity() {
             }
             popup.show()
         }
+    }
+
+    // ── CACHÉ ──────────────────────────────────────────────────────────────
+
+    /**
+     * Calcula recursivamente el tamaño en bytes de la carpeta de caché
+     * de la app, donde WebView guarda el caché HTTP de las páginas.
+     */
+    private fun getCacheSize(): Long {
+        fun dirSize(dir: File?): Long {
+            if (dir == null || !dir.exists()) return 0L
+            var size = 0L
+            dir.listFiles()?.forEach { f ->
+                size += if (f.isDirectory) dirSize(f) else f.length()
+            }
+            return size
+        }
+        // context.cacheDir cubre el caché HTTP de WebView en Android moderno.
+        // También revisamos "app_webview" donde Android guarda datos de sesión.
+        val cacheDirSize = dirSize(cacheDir)
+        val webviewDataDir = File(applicationInfo.dataDir, "app_webview/Default/Cache")
+        val webviewCacheSize = dirSize(webviewDataDir)
+        return cacheDirSize + webviewCacheSize
+    }
+
+    private fun formatBytes(bytes: Long): String = when {
+        bytes >= 1_048_576 -> "%.1f MB".format(bytes / 1_048_576.0)
+        bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
+        else -> "$bytes B"
+    }
+
+    private fun showClearCacheDialog() {
+        val sizeBytes = getCacheSize()
+        val sizeText = formatBytes(sizeBytes)
+
+        AlertDialog.Builder(this)
+            .setTitle("🧹 Borrar caché")
+            .setMessage("¿Desea borrar $sizeText de caché? Las páginas tardarán un poco más en cargar la próxima vez.")
+            .setPositiveButton("Aceptar") { _, _ ->
+                clearAllCache()
+                Toast.makeText(this, "✅ Caché borrado ($sizeText liberados)", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun clearAllCache() {
+        // Limpia el caché de cada WebView abierto
+        tabs.forEach { it.webView?.clearCache(true) }
+
+        // Borra físicamente el contenido de la carpeta de caché
+        fun deleteDirContents(dir: File?) {
+            if (dir == null || !dir.exists()) return
+            dir.listFiles()?.forEach { f ->
+                if (f.isDirectory) {
+                    deleteDirContents(f)
+                    f.delete()
+                } else {
+                    f.delete()
+                }
+            }
+        }
+        deleteDirContents(cacheDir)
+        deleteDirContents(File(applicationInfo.dataDir, "app_webview/Default/Cache"))
     }
 
     private fun toggleDesktopMode() {
@@ -261,6 +328,12 @@ class MainActivity : AppCompatActivity() {
                 displayZoomControls = false
                 mediaPlaybackRequiresUserGesture = false
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+                // ── CACHÉ ACTIVADO ────────────────────────────────────
+                // LOAD_DEFAULT: usa caché cuando es válido, revalida si no,
+                // acelerando notablemente la recarga de páginas visitadas.
+                cacheMode = WebSettings.LOAD_DEFAULT
+                databaseEnabled = true
             }
             webViewClient = buildWebViewClient(tab)
             webChromeClient = buildWebChromeClient(tab)
@@ -447,14 +520,10 @@ class MainActivity : AppCompatActivity() {
 
     // ── PASSWORD AUTOFILL ──────────────────────────────────────────────────
 
-    /**
-     * Si ya hay credenciales guardadas para este dominio, las rellena
-     * automáticamente en los campos de usuario/contraseña detectados.
-     */
     private fun injectAutofill(view: WebView, url: String) {
         val creds = PasswordManager.getForDomain(this, url)
         if (creds.isEmpty()) return
-        val cred = creds.first() // usa la más reciente si hay varias
+        val cred = creds.first()
 
         val user = cred.username.replace("'", "\\'")
         val pass = cred.password.replace("'", "\\'")
@@ -485,10 +554,6 @@ class MainActivity : AppCompatActivity() {
         view.evaluateJavascript(js, null)
     }
 
-    /**
-     * Detecta cuando el usuario envía un formulario de login (campo de
-     * password + campo de texto) y ofrece guardar las credenciales.
-     */
     private fun injectLoginDetector(view: WebView, url: String) {
         view.addJavascriptInterface(object {
             @JavascriptInterface
@@ -523,7 +588,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun offerSaveCredentials(url: String, username: String, password: String) {
         val domain = PasswordManager.domainFromUrl(url)
-        // Evitar preguntar de nuevo si ya está guardado exactamente igual
         val already = PasswordManager.getForDomain(this, url)
             .any { it.username == username && it.password == password }
         if (already) return

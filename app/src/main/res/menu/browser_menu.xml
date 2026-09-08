@@ -6,6 +6,7 @@
     <item android:id="@+id/menu_history"     android:title="📚 Historial" />
     <item android:id="@+id/menu_downloads"   android:title="📥 Descargas" />
     <item android:id="@+id/menu_passwords"   android:title="🔑 Contraseñas" />
+    <item android:id="@+id/menu_clear_cache" android:title="🧹 Borrar caché" />
     <item android:id="@+id/menu_theme"       android:title="🎨 Tema" />
     <item android:id="@+id/menu_desktop"     android:title="🖥️ Modo escritorio" />
 
