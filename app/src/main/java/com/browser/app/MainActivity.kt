@@ -1,12 +1,10 @@
 package com.browser.app
 
 import android.annotation.SuppressLint
-import android.net.Uri
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import android.app.Activity
 import android.app.DownloadManager
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -15,6 +13,8 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.webkit.*
 import android.widget.*
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -24,7 +24,6 @@ import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
-    // ── Views ──────────────────────────────────────────────────────────────
     private lateinit var etAddress: EditText
     private lateinit var progressBar: ProgressBar
     private lateinit var webContainer: FrameLayout
@@ -42,7 +41,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnAdBlock: ImageButton
     private lateinit var btnMenu: ImageButton
 
-    // ── State ──────────────────────────────────────────────────────────────
     private val tabs = mutableListOf<BrowserTab>()
     private var activeTabIndex = 0
     private var tabCounter = 0
@@ -50,12 +48,12 @@ class MainActivity : AppCompatActivity() {
     private var searchBarVisible = false
     private var desktopMode = false
 
-    // Fullscreen video
-private var filePathCallback: ValueCallback<Array<Uri>>? = null
-private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var fullscreenContainer: FrameLayout? = null
+
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
 
     companion object {
         const val REQ_HISTORY = 301
@@ -103,8 +101,6 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
         }
     }
 
-    // ── THEME ──────────────────────────────────────────────────────────────
-
     private fun applyTheme() {
         when (StorageManager.getTheme(this)) {
             StorageManager.THEME_LIGHT -> AppCompatDelegate.setDefaultNightMode(
@@ -149,8 +145,6 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
             .show()
     }
 
-    // ── BIND VIEWS ─────────────────────────────────────────────────────────
-
     private fun bindViews() {
         etAddress          = findViewById(R.id.etAddress)
         progressBar        = findViewById(R.id.progressBar)
@@ -168,8 +162,6 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
         btnAdBlock         = findViewById(R.id.btnAdBlock)
         btnMenu            = findViewById(R.id.btnMenu)
     }
-
-    // ── MENU ───────────────────────────────────────────────────────────────
 
     private fun setupMenuButton() {
         btnMenu.setOnClickListener { view ->
@@ -198,23 +190,11 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
                             }
                         }
                     }
-                    R.id.menu_favorites -> {
-                        startActivityForResult(
-                            Intent(this, FavoritesActivity::class.java), REQ_FAVORITES)
-                    }
-                    R.id.menu_history -> {
-                        startActivityForResult(
-                            Intent(this, HistoryActivity::class.java), REQ_HISTORY)
-                    }
-                    R.id.menu_downloads -> {
-                        startActivity(Intent(this, DownloadsActivity::class.java))
-                    }
-                    R.id.menu_passwords -> {
-                        startActivity(Intent(this, PasswordsActivity::class.java))
-                    }
-                    R.id.menu_clear_cache -> {
-                        showClearCacheDialog()
-                    }
+                    R.id.menu_favorites -> startActivityForResult(Intent(this, FavoritesActivity::class.java), REQ_FAVORITES)
+                    R.id.menu_history -> startActivityForResult(Intent(this, HistoryActivity::class.java), REQ_HISTORY)
+                    R.id.menu_downloads -> startActivity(Intent(this, DownloadsActivity::class.java))
+                    R.id.menu_passwords -> startActivity(Intent(this, PasswordsActivity::class.java))
+                    R.id.menu_clear_cache -> showClearCacheDialog()
                     R.id.menu_theme -> showThemeDialog()
                     R.id.menu_desktop -> toggleDesktopMode()
                 }
@@ -224,12 +204,6 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
         }
     }
 
-    // ── CACHÉ ──────────────────────────────────────────────────────────────
-
-    /**
-     * Calcula recursivamente el tamaño en bytes de la carpeta de caché
-     * de la app, donde WebView guarda el caché HTTP de las páginas.
-     */
     private fun getCacheSize(): Long {
         fun dirSize(dir: File?): Long {
             if (dir == null || !dir.exists()) return 0L
@@ -239,8 +213,6 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
             }
             return size
         }
-        // context.cacheDir cubre el caché HTTP de WebView en Android moderno.
-        // También revisamos "app_webview" donde Android guarda datos de sesión.
         val cacheDirSize = dirSize(cacheDir)
         val webviewDataDir = File(applicationInfo.dataDir, "app_webview/Default/Cache")
         val webviewCacheSize = dirSize(webviewDataDir)
@@ -269,10 +241,8 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
     }
 
     private fun clearAllCache() {
-        // Limpia el caché de cada WebView abierto
         tabs.forEach { it.webView?.clearCache(true) }
 
-        // Borra físicamente el contenido de la carpeta de caché
         fun deleteDirContents(dir: File?) {
             if (dir == null || !dir.exists()) return
             dir.listFiles()?.forEach { f ->
@@ -311,8 +281,6 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
         }
     }
 
-    // ── TABS ───────────────────────────────────────────────────────────────
-
     private fun setupTabs() {
         tabAdapter = TabAdapter(tabs, activeTabIndex,
             onTabClick = { switchTab(it) },
@@ -342,14 +310,10 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
                 mediaPlaybackRequiresUserGesture = false
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
-                // ── CACHÉ ACTIVADO ────────────────────────────────────
-                // LOAD_DEFAULT: usa caché cuando es válido, revalida si no,
-                // acelerando notablemente la recarga de páginas visitadas.
                 cacheMode = WebSettings.LOAD_DEFAULT
                 databaseEnabled = true
 
-                // Identificarse como Chrome normal, no como WebView embebido
-                // (Google bloquea funciones como "Imágenes" cuando detecta "wv" en el UA)
+                // Identificarse como Chrome normal para evitar bloqueos de Google
                 userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
             }
             webViewClient = buildWebViewClient(tab)
@@ -370,10 +334,7 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
                     }
                     val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
                     dm.enqueue(request)
-                    val destPath = File(
-                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                        fileName
-                    ).absolutePath
+                    val destPath = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName).absolutePath
                     StorageManager.addDownload(this@MainActivity, destPath)
                     Toast.makeText(this@MainActivity, "📥 Descargando: $fileName", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
@@ -391,11 +352,7 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
 
         tabAdapter.notifyItemInserted(tabs.size - 1)
 
-        if (switchToIt) {
-            switchTab(tabs.size - 1)
-        } else {
-            tabAdapter.notifyItemChanged(tabs.size - 1)
-        }
+        if (switchToIt) switchTab(tabs.size - 1) else tabAdapter.notifyItemChanged(tabs.size - 1)
 
         wv.loadUrl(url)
     }
@@ -437,17 +394,10 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
 
     override fun onStop() {
         super.onStop()
-        StorageManager.saveTabs(
-            this,
-            tabs.map { Pair(it.url, it.title) },
-            activeTabIndex
-        )
+        StorageManager.saveTabs(this, tabs.map { Pair(it.url, it.title) }, activeTabIndex)
     }
 
-    // ── WEBVIEW CLIENTS ────────────────────────────────────────────────────
-
     private fun buildWebViewClient(tab: BrowserTab) = object : WebViewClient() {
-
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             if (AdBlocker.shouldBlock(request)) return AdBlocker.getEmptyResponse()
             return super.shouldInterceptRequest(view, request)
@@ -467,15 +417,12 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
             val title = view.title ?: url
             tab.title = title
             tab.url = url
-
             val idx = tabs.indexOfFirst { it.id == tab.id }
             if (idx >= 0) tabAdapter.notifyItemChanged(idx)
-
             if (idx == activeTabIndex) {
                 progressBar.visibility = View.GONE
                 etAddress.setText(url)
             }
-
             StorageManager.addHistory(this@MainActivity, url, title)
             injectVideoDetector(view)
             injectLoginDetector(view, url)
@@ -490,7 +437,6 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
     }
 
     private fun buildWebChromeClient(tab: BrowserTab) = object : WebChromeClient() {
-
         override fun onProgressChanged(view: WebView, newProgress: Int) {
             val idx = tabs.indexOfFirst { it.id == tab.id }
             if (idx == activeTabIndex) {
@@ -500,75 +446,11 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
         }
 
         override fun onReceivedTitle(view: WebView, title: String) {
- 
-        override fun onShowFileChooser(
-            webView: WebView,
-            callback: ValueCallback<Array<Uri>>,
-            fileChooserParams: FileChooserParams
-        ): Boolean {
-            filePathCallback = callback
-            val intent = fileChooserParams.createIntent()
-            return try {
-                fileChooserLauncher.launch(intent)
-                true
-            } catch (e: Exception) {
-                filePathCallback = null
-                false
-            }
-        }
             tab.title = title
- 
-        override fun onShowFileChooser(
-            webView: WebView,
-            callback: ValueCallback<Array<Uri>>,
-            fileChooserParams: FileChooserParams
-        ): Boolean {
-            filePathCallback = callback
-            val intent = fileChooserParams.createIntent()
-            return try {
-                fileChooserLauncher.launch(intent)
-                true
-            } catch (e: Exception) {
-                filePathCallback = null
-                false
-            }
-        }
             val idx = tabs.indexOfFirst { it.id == tab.id }
- 
-        override fun onShowFileChooser(
-            webView: WebView,
-            callback: ValueCallback<Array<Uri>>,
-            fileChooserParams: FileChooserParams
-        ): Boolean {
-            filePathCallback = callback
-            val intent = fileChooserParams.createIntent()
-            return try {
-                fileChooserLauncher.launch(intent)
-                true
-            } catch (e: Exception) {
-                filePathCallback = null
-                false
-            }
-        }
             if (idx >= 0) tabAdapter.notifyItemChanged(idx)
- 
-        override fun onShowFileChooser(
-            webView: WebView,
-            callback: ValueCallback<Array<Uri>>,
-            fileChooserParams: FileChooserParams
-        ): Boolean {
-            filePathCallback = callback
-            val intent = fileChooserParams.createIntent()
-            return try {
-                fileChooserLauncher.launch(intent)
-                true
-            } catch (e: Exception) {
-                filePathCallback = null
-                false
-            }
         }
-        }
- 
+
         override fun onShowFileChooser(
             webView: WebView,
             callback: ValueCallback<Array<Uri>>,
@@ -591,16 +473,13 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
             customViewCallback = callback
             val container = FrameLayout(this@MainActivity).apply {
                 setBackgroundColor(android.graphics.Color.BLACK)
-                layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
             }
-            container.addView(view, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            container.addView(view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             (window.decorView as FrameLayout).addView(container)
             fullscreenContainer = container
             @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         }
 
         override fun onHideCustomView() {
@@ -615,21 +494,16 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
         }
     }
 
-    // ── PASSWORD AUTOFILL ──────────────────────────────────────────────────
-
     private fun injectAutofill(view: WebView, url: String) {
         val creds = PasswordManager.getForDomain(this, url)
         if (creds.isEmpty()) return
         val cred = creds.first()
-
         val user = cred.username.replace("'", "\\'")
         val pass = cred.password.replace("'", "\\'")
-
         val js = """
             (function() {
                 function setNativeValue(el, value) {
-                    var setter = Object.getOwnPropertyDescriptor(
-                        window.HTMLInputElement.prototype, 'value').set;
+                    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
                     setter.call(el, value);
                     el.dispatchEvent(new Event('input', {bubbles:true}));
                     el.dispatchEvent(new Event('change', {bubbles:true}));
@@ -639,15 +513,12 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
                 inputs.forEach(function(el) {
                     if (!el.offsetParent) return;
                     if (el.type === 'password') { passField = el; }
-                    else if ((el.type === 'text' || el.type === 'email' || el.type === '') && !userField) {
-                        userField = el;
-                    }
+                    else if ((el.type === 'text' || el.type === 'email' || el.type === '') && !userField) { userField = el; }
                 });
                 if (userField) setNativeValue(userField, '$user');
                 if (passField) setNativeValue(passField, '$pass');
             })();
         """.trimIndent()
-
         view.evaluateJavascript(js, null)
     }
 
@@ -655,12 +526,9 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
         view.addJavascriptInterface(object {
             @JavascriptInterface
             fun onLoginSubmit(username: String, password: String) {
-                runOnUiThread {
-                    offerSaveCredentials(url, username, password)
-                }
+                runOnUiThread { offerSaveCredentials(url, username, password) }
             }
         }, "PasswordBridge")
-
         val js = """
             (function() {
                 if (window.__pwInjected) return;
@@ -670,25 +538,19 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
                     if (!form || form.tagName !== 'FORM') return;
                     var passField = form.querySelector('input[type=password]');
                     if (!passField || !passField.value) return;
-                    var userField = form.querySelector(
-                        'input[type=text], input[type=email], input[name*=user], input[id*=user]');
+                    var userField = form.querySelector('input[type=text], input[type=email], input[name*=user], input[id*=user]');
                     var username = userField ? userField.value : '';
-                    if (username) {
-                        PasswordBridge.onLoginSubmit(username, passField.value);
-                    }
+                    if (username) PasswordBridge.onLoginSubmit(username, passField.value);
                 }, true);
             })();
         """.trimIndent()
-
         view.evaluateJavascript(js, null)
     }
 
     private fun offerSaveCredentials(url: String, username: String, password: String) {
         val domain = PasswordManager.domainFromUrl(url)
-        val already = PasswordManager.getForDomain(this, url)
-            .any { it.username == username && it.password == password }
+        val already = PasswordManager.getForDomain(this, url).any { it.username == username && it.password == password }
         if (already) return
-
         AlertDialog.Builder(this)
             .setTitle("🔑 Guardar contraseña")
             .setMessage("¿Guardar el usuario y contraseña para $domain?")
@@ -699,8 +561,6 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
             .setNegativeButton("No, gracias", null)
             .show()
     }
-
-    // ── ADDRESS BAR ────────────────────────────────────────────────────────
 
     private fun setupAddressBar() {
         etAddress.setOnEditorActionListener { _, actionId, _ ->
@@ -723,14 +583,11 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
         if (tabs.isEmpty()) openNewTab(url) else activeWebView?.loadUrl(url)
     }
 
-    // ── GAMEPAD ────────────────────────────────────────────────────────────
-
     private fun setupGamepad() {
         btnToggleGamepad.setOnClickListener {
             gamepadVisible = !gamepadVisible
             gamepadOverlay.visibility = if (gamepadVisible) View.VISIBLE else View.GONE
-            btnToggleGamepad.setColorFilter(
-                if (gamepadVisible) 0xFF00ffc3.toInt() else 0xFF4a5568.toInt())
+            btnToggleGamepad.setColorFilter(if (gamepadVisible) 0xFF00ffc3.toInt() else 0xFF4a5568.toInt())
         }
         setupGamepadBtn(R.id.btnUp)     { injectKey("ArrowUp") }
         setupGamepadBtn(R.id.btnDown)   { injectKey("ArrowDown") }
@@ -767,8 +624,6 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
         """.trimIndent(), null)
     }
 
-    // ── VIDEO CONTROLS ─────────────────────────────────────────────────────
-
     private fun injectVideoDetector(view: WebView) {
         view.addJavascriptInterface(object {
             @JavascriptInterface
@@ -786,8 +641,7 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
     private fun setupVideoControls() {
         videoControls.visibility = View.GONE
         btnVideoPlay.setOnClickListener {
-            activeWebView?.evaluateJavascript(
-                "(function(){var v=document.querySelector('video');if(v){if(v.paused)v.play();else v.pause();}})();", null)
+            activeWebView?.evaluateJavascript("(function(){var v=document.querySelector('video');if(v){if(v.paused)v.play();else v.pause();}})();", null)
         }
         btnVideoFullscreen.setOnClickListener {
             activeWebView?.evaluateJavascript("""
@@ -798,8 +652,6 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
         }
         btnVideoClose.setOnClickListener { videoControls.visibility = View.GONE }
     }
-
-    // ── SEARCH IN PAGE ─────────────────────────────────────────────────────
 
     private fun setupSearchBar() {
         searchBar.visibility = View.GONE
@@ -818,8 +670,6 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
             searchBarVisible = false
         }
     }
-
-    // ── BOTTOM BAR ─────────────────────────────────────────────────────────
 
     private fun setupBottomBar() {
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener {
@@ -848,21 +698,16 @@ private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
     }
 
     private fun updateAdBlockBtn() {
-        btnAdBlock.setColorFilter(
-            if (AdBlocker.enabled) 0xFF00ffc3.toInt() else 0xFF4a5568.toInt())
+        btnAdBlock.setColorFilter(if (AdBlocker.enabled) 0xFF00ffc3.toInt() else 0xFF4a5568.toInt())
     }
 
-    // ── UTILS ──────────────────────────────────────────────────────────────
-
     private fun hideKeyboard() {
-        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
-            .hideSoftInputFromWindow(etAddress.windowToken, 0)
+        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(etAddress.windowToken, 0)
         etAddress.clearFocus()
     }
 
     private fun showKeyboard(view: View) {
-        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
-            .showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
+        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
     }
 
     override fun onBackPressed() {
